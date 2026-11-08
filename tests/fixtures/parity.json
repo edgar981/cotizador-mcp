@@ -1,0 +1,1045 @@
+{
+  "_fuente": {
+    "repo": "cotizador-personal-shopper",
+    "commit": "00f0d8afc39a402efeb2f0661b9c9847227977b8",
+    "modulos": [
+      "lib/cotizador.ts",
+      "lib/envio.ts",
+      "lib/comision.ts",
+      "lib/settings-defaults.ts"
+    ],
+    "generado_por": "tools/generar-parity.ts",
+    "nota": "Salidas producidas EJECUTANDO el TypeScript, no copiadas de los tests."
+  },
+  "calcular_cotizacion": [
+    {
+      "nombre": "tenis, caso base del test",
+      "entrada": {
+        "precio_usd": 100,
+        "peso_lb": 2.6,
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0.02,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 7,
+        "flete_usd": 15.6,
+        "aterrizado_usd": 122.6,
+        "trm_aplicada": 4080,
+        "costo_cop": 500208,
+        "margen_cop": 125052,
+        "subtotal_cop": 625260,
+        "precio_cop": 630000
+      }
+    },
+    {
+      "nombre": "subtotal exacto sobre el múltiplo",
+      "entrada": {
+        "precio_usd": 100,
+        "peso_lb": 0,
+        "sales_tax_pct": 0,
+        "tarifa_lb_usd": 0,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 0,
+        "flete_usd": 0,
+        "aterrizado_usd": 100,
+        "trm_aplicada": 4000,
+        "costo_cop": 400000,
+        "margen_cop": 100000,
+        "subtotal_cop": 500000,
+        "precio_cop": 500000
+      }
+    },
+    {
+      "nombre": "un centavo por encima del múltiplo",
+      "entrada": {
+        "precio_usd": 100.01,
+        "peso_lb": 0,
+        "sales_tax_pct": 0,
+        "tarifa_lb_usd": 0,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 0,
+        "flete_usd": 0,
+        "aterrizado_usd": 100.01,
+        "trm_aplicada": 4000,
+        "costo_cop": 400040,
+        "margen_cop": 100010,
+        "subtotal_cop": 500050,
+        "precio_cop": 505000
+      }
+    },
+    {
+      "nombre": "perfume con TRM real y redondeo a 1000",
+      "entrada": {
+        "precio_usd": 89.99,
+        "peso_lb": 1.1,
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 3204.51,
+        "trm_buffer_pct": 0.02,
+        "margen_pct": 0.3,
+        "redondeo_cop": 1000
+      },
+      "esperado": {
+        "tax_usd": 6.3,
+        "flete_usd": 6.6,
+        "aterrizado_usd": 102.89,
+        "trm_aplicada": 3268.6,
+        "costo_cop": 336306.25,
+        "margen_cop": 100891.88,
+        "subtotal_cop": 437198.13,
+        "precio_cop": 438000
+      }
+    },
+    {
+      "nombre": "sin redondeo (redondeo_cop = 0)",
+      "entrada": {
+        "precio_usd": 100,
+        "peso_lb": 2.6,
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0.02,
+        "margen_pct": 0.25,
+        "redondeo_cop": 0
+      },
+      "esperado": {
+        "tax_usd": 7,
+        "flete_usd": 15.6,
+        "aterrizado_usd": 122.6,
+        "trm_aplicada": 4080,
+        "costo_cop": 500208,
+        "margen_cop": 125052,
+        "subtotal_cop": 625260,
+        "precio_cop": 625260
+      }
+    },
+    {
+      "nombre": "redondeo negativo cae en el mismo paso 1",
+      "entrada": {
+        "precio_usd": 100,
+        "peso_lb": 2.6,
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0.02,
+        "margen_pct": 0.25,
+        "redondeo_cop": -5000
+      },
+      "esperado": {
+        "tax_usd": 7,
+        "flete_usd": 15.6,
+        "aterrizado_usd": 122.6,
+        "trm_aplicada": 4080,
+        "costo_cop": 500208,
+        "margen_cop": 125052,
+        "subtotal_cop": 625260,
+        "precio_cop": 625260
+      }
+    },
+    {
+      "nombre": "precio y peso NaN se tratan como cero",
+      "entrada": {
+        "precio_usd": "NaN",
+        "peso_lb": "NaN",
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0.02,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 0,
+        "flete_usd": 0,
+        "aterrizado_usd": 0,
+        "trm_aplicada": 4080,
+        "costo_cop": 0,
+        "margen_cop": 0,
+        "subtotal_cop": 0,
+        "precio_cop": 0
+      }
+    },
+    {
+      "nombre": "precio y peso negativos se recortan a cero",
+      "entrada": {
+        "precio_usd": -50,
+        "peso_lb": -3,
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0.02,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 0,
+        "flete_usd": 0,
+        "aterrizado_usd": 0,
+        "trm_aplicada": 4080,
+        "costo_cop": 0,
+        "margen_cop": 0,
+        "subtotal_cop": 0,
+        "precio_cop": 0
+      }
+    },
+    {
+      "nombre": "empate a .5 en el tax (0.125 USD)",
+      "entrada": {
+        "precio_usd": 2.5,
+        "peso_lb": 0,
+        "sales_tax_pct": 0.05,
+        "tarifa_lb_usd": 0,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 0.13,
+        "flete_usd": 0,
+        "aterrizado_usd": 2.63,
+        "trm_aplicada": 4000,
+        "costo_cop": 10520,
+        "margen_cop": 2630,
+        "subtotal_cop": 13150,
+        "precio_cop": 15000
+      }
+    },
+    {
+      "nombre": "empate a .5 en el flete (0.125 USD)",
+      "entrada": {
+        "precio_usd": 0,
+        "peso_lb": 0.25,
+        "sales_tax_pct": 0,
+        "tarifa_lb_usd": 0.5,
+        "trm_oficial": 4000,
+        "trm_buffer_pct": 0,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 0,
+        "flete_usd": 0.13,
+        "aterrizado_usd": 0.13,
+        "trm_aplicada": 4000,
+        "costo_cop": 520,
+        "margen_cop": 130,
+        "subtotal_cop": 650,
+        "precio_cop": 5000
+      }
+    },
+    {
+      "nombre": "empate a .005 en el margen",
+      "entrada": {
+        "precio_usd": 1,
+        "peso_lb": 0,
+        "sales_tax_pct": 0,
+        "tarifa_lb_usd": 0,
+        "trm_oficial": 1,
+        "trm_buffer_pct": 0,
+        "margen_pct": 0.045,
+        "redondeo_cop": 1
+      },
+      "esperado": {
+        "tax_usd": 0,
+        "flete_usd": 0,
+        "aterrizado_usd": 1,
+        "trm_aplicada": 1,
+        "costo_cop": 1,
+        "margen_cop": 0.05,
+        "subtotal_cop": 1.05,
+        "precio_cop": 2
+      }
+    },
+    {
+      "nombre": "empate a .5 en la TRM aplicada",
+      "entrada": {
+        "precio_usd": 100,
+        "peso_lb": 2.6,
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 1000.25,
+        "trm_buffer_pct": 0,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 7,
+        "flete_usd": 15.6,
+        "aterrizado_usd": 122.6,
+        "trm_aplicada": 1000.25,
+        "costo_cop": 122630.65,
+        "margen_cop": 30657.66,
+        "subtotal_cop": 153288.31,
+        "precio_cop": 155000
+      }
+    },
+    {
+      "nombre": "todo en cero",
+      "entrada": {
+        "precio_usd": 0,
+        "peso_lb": 0,
+        "sales_tax_pct": 0,
+        "tarifa_lb_usd": 0,
+        "trm_oficial": 0,
+        "trm_buffer_pct": 0,
+        "margen_pct": 0,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 0,
+        "flete_usd": 0,
+        "aterrizado_usd": 0,
+        "trm_aplicada": 0,
+        "costo_cop": 0,
+        "margen_cop": 0,
+        "subtotal_cop": 0,
+        "precio_cop": 0
+      }
+    },
+    {
+      "nombre": "valores grandes (ruido de punto flotante)",
+      "entrada": {
+        "precio_usd": 1999.99,
+        "peso_lb": 12.7,
+        "sales_tax_pct": 0.07,
+        "tarifa_lb_usd": 6,
+        "trm_oficial": 4987.63,
+        "trm_buffer_pct": 0.02,
+        "margen_pct": 0.25,
+        "redondeo_cop": 5000
+      },
+      "esperado": {
+        "tax_usd": 140,
+        "flete_usd": 76.2,
+        "aterrizado_usd": 2216.19,
+        "trm_aplicada": 5087.38,
+        "costo_cop": 11274600.68,
+        "margen_cop": 2818650.17,
+        "subtotal_cop": 14093250.85,
+        "precio_cop": 14095000
+      }
+    }
+  ],
+  "calcular_envio_nacional": [
+    {
+      "nombre": "redondea a 500",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 12000,
+        "adicional_lb_cop": 2000
+      },
+      "peso_lb": 2.6,
+      "esperado": 17500
+    },
+    {
+      "nombre": "bruto exacto sobre el múltiplo",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 12000,
+        "adicional_lb_cop": 2000
+      },
+      "peso_lb": 1.25,
+      "esperado": 14500
+    },
+    {
+      "nombre": "tarifa base ya múltiplo de 500",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 12000,
+        "adicional_lb_cop": 0
+      },
+      "peso_lb": 3.4,
+      "esperado": 12000
+    },
+    {
+      "nombre": "peso cero: solo tarifa base",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 15000,
+        "adicional_lb_cop": 2000
+      },
+      "peso_lb": 0,
+      "esperado": 15000
+    },
+    {
+      "nombre": "tarifa plana, peso liviano",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 16000,
+        "adicional_lb_cop": 0
+      },
+      "peso_lb": 0.5,
+      "esperado": 16000
+    },
+    {
+      "nombre": "tarifa plana, peso medio",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 16000,
+        "adicional_lb_cop": 0
+      },
+      "peso_lb": 2.6,
+      "esperado": 16000
+    },
+    {
+      "nombre": "tarifa plana, peso alto",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 16000,
+        "adicional_lb_cop": 0
+      },
+      "peso_lb": 12,
+      "esperado": 16000
+    },
+    {
+      "nombre": "peso negativo",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 12000,
+        "adicional_lb_cop": 2000
+      },
+      "peso_lb": -5,
+      "esperado": 12000
+    },
+    {
+      "nombre": "tarifa base negativa",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": -1,
+        "adicional_lb_cop": 2000
+      },
+      "peso_lb": 0,
+      "esperado": 0
+    },
+    {
+      "nombre": "adicional negativo",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 12000,
+        "adicional_lb_cop": -100
+      },
+      "peso_lb": 2,
+      "esperado": 12000
+    },
+    {
+      "nombre": "zona gratis no devuelve -0",
+      "zona": {
+        "nombre": "X",
+        "tarifa_base_cop": 0,
+        "adicional_lb_cop": 0
+      },
+      "peso_lb": 0,
+      "esperado": 0
+    },
+    {
+      "nombre": "un peso por encima del múltiplo",
+      "zona": {
+        "nombre": "X",
+        "tarifa_base_cop": 16001,
+        "adicional_lb_cop": 0
+      },
+      "peso_lb": 0,
+      "esperado": 16500
+    },
+    {
+      "nombre": "peso fraccionario largo",
+      "zona": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 12000,
+        "adicional_lb_cop": 2000
+      },
+      "peso_lb": 0.3333333333333333,
+      "esperado": 13000
+    }
+  ],
+  "buscar_zona": [
+    {
+      "nombre_buscado": "Bogotá",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 16000,
+        "adicional_lb_cop": 0
+      }
+    },
+    {
+      "nombre_buscado": "  bogotá  ",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 16000,
+        "adicional_lb_cop": 0
+      }
+    },
+    {
+      "nombre_buscado": "BOGOTÁ",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": {
+        "nombre": "Bogotá",
+        "tarifa_base_cop": 16000,
+        "adicional_lb_cop": 0
+      }
+    },
+    {
+      "nombre_buscado": "Bogota",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": null
+    },
+    {
+      "nombre_buscado": "Municipio",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": {
+        "nombre": "Municipio",
+        "tarifa_base_cop": 20000,
+        "adicional_lb_cop": 0
+      }
+    },
+    {
+      "nombre_buscado": "no existe",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": null
+    },
+    {
+      "nombre_buscado": "",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": null
+    },
+    {
+      "nombre_buscado": "   ",
+      "zonas": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": null
+    }
+  ],
+  "normalizar_zonas": [
+    {
+      "nombre": "null = anterior a la migración",
+      "entrada": null,
+      "esperado": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ]
+    },
+    {
+      "nombre": "undefined = lo mismo",
+      "entrada": "__undefined__",
+      "esperado": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ]
+    },
+    {
+      "nombre": "array vacío = apagado a propósito",
+      "entrada": [],
+      "esperado": []
+    },
+    {
+      "nombre": "no es un array (string)",
+      "entrada": "texto",
+      "esperado": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ]
+    },
+    {
+      "nombre": "no es un array (objeto)",
+      "entrada": {
+        "nombre": "Bogotá"
+      },
+      "esperado": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 16000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Ciudades principales",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Resto del país",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        },
+        {
+          "nombre": "Municipio",
+          "tarifa_base_cop": 20000,
+          "adicional_lb_cop": 0
+        }
+      ]
+    },
+    {
+      "nombre": "descarta filas incompletas, negativas y repetidas",
+      "entrada": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 12000,
+          "adicional_lb_cop": 2000
+        },
+        {
+          "nombre": "  ",
+          "tarifa_base_cop": 1,
+          "adicional_lb_cop": 1
+        },
+        {
+          "nombre": "Cali",
+          "tarifa_base_cop": -1,
+          "adicional_lb_cop": 1
+        },
+        {
+          "nombre": "Cali",
+          "tarifa_base_cop": 1,
+          "adicional_lb_cop": -1
+        },
+        {
+          "nombre": "bogota",
+          "tarifa_base_cop": 9,
+          "adicional_lb_cop": 9
+        },
+        null,
+        "x",
+        5
+      ],
+      "esperado": [
+        {
+          "nombre": "Bogotá",
+          "tarifa_base_cop": 12000,
+          "adicional_lb_cop": 2000
+        },
+        {
+          "nombre": "bogota",
+          "tarifa_base_cop": 9,
+          "adicional_lb_cop": 9
+        }
+      ]
+    },
+    {
+      "nombre": "tarifas en cero son válidas",
+      "entrada": [
+        {
+          "nombre": "Recoge",
+          "tarifa_base_cop": 0,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": [
+        {
+          "nombre": "Recoge",
+          "tarifa_base_cop": 0,
+          "adicional_lb_cop": 0
+        }
+      ]
+    },
+    {
+      "nombre": "recorta espacios del nombre",
+      "entrada": [
+        {
+          "nombre": "  Cartagena  ",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        }
+      ],
+      "esperado": [
+        {
+          "nombre": "Cartagena",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        }
+      ]
+    },
+    {
+      "nombre": "acepta números como texto",
+      "entrada": [
+        {
+          "nombre": "Cali",
+          "tarifa_base_cop": "18500",
+          "adicional_lb_cop": "0"
+        }
+      ],
+      "esperado": [
+        {
+          "nombre": "Cali",
+          "tarifa_base_cop": 18500,
+          "adicional_lb_cop": 0
+        }
+      ]
+    }
+  ],
+  "calcular_comision": [
+    {
+      "nombre": "reparto normal",
+      "margen_cop": 125052,
+      "comision_pct": 0.1,
+      "esperado": {
+        "comision_cop": 12505.2,
+        "margen_neto_cop": 112546.8
+      }
+    },
+    {
+      "nombre": "0% no reparte",
+      "margen_cop": 125052,
+      "comision_pct": 0,
+      "esperado": {
+        "comision_cop": 0,
+        "margen_neto_cop": 125052
+      }
+    },
+    {
+      "nombre": "100% no deja neto",
+      "margen_cop": 80000,
+      "comision_pct": 1,
+      "esperado": {
+        "comision_cop": 80000,
+        "margen_neto_cop": 0
+      }
+    },
+    {
+      "nombre": "margen cero",
+      "margen_cop": 0,
+      "comision_pct": 0.2,
+      "esperado": {
+        "comision_cop": 0,
+        "margen_neto_cop": 0
+      }
+    },
+    {
+      "nombre": "margen negativo",
+      "margen_cop": -5000,
+      "comision_pct": 0.1,
+      "esperado": {
+        "comision_cop": 0,
+        "margen_neto_cop": 0
+      }
+    },
+    {
+      "nombre": "pct negativo",
+      "margen_cop": 10000,
+      "comision_pct": -0.1,
+      "esperado": {
+        "comision_cop": 0,
+        "margen_neto_cop": 10000
+      }
+    },
+    {
+      "nombre": "ruido de punto flotante",
+      "margen_cop": 0.3,
+      "comision_pct": 0.1,
+      "esperado": {
+        "comision_cop": 0.03,
+        "margen_neto_cop": 0.27
+      }
+    },
+    {
+      "nombre": "margen típico al 12%",
+      "margen_cop": 50000,
+      "comision_pct": 0.12,
+      "esperado": {
+        "comision_cop": 6000,
+        "margen_neto_cop": 44000
+      }
+    },
+    {
+      "nombre": "empate a .005",
+      "margen_cop": 0.05,
+      "comision_pct": 0.1,
+      "esperado": {
+        "comision_cop": 0.01,
+        "margen_neto_cop": 0.04
+      }
+    },
+    {
+      "nombre": "empate a .5 centavos",
+      "margen_cop": 12.345,
+      "comision_pct": 0.5,
+      "esperado": {
+        "comision_cop": 6.17,
+        "margen_neto_cop": 6.18
+      }
+    },
+    {
+      "nombre": "pct mayor que 1",
+      "margen_cop": 10000,
+      "comision_pct": 1.5,
+      "esperado": {
+        "comision_cop": 15000,
+        "margen_neto_cop": -5000
+      }
+    },
+    {
+      "nombre": "margen grande",
+      "margen_cop": 1234567.89,
+      "comision_pct": 0.075,
+      "esperado": {
+        "comision_cop": 92592.59,
+        "margen_neto_cop": 1141975.3
+      }
+    }
+  ],
+  "porcentaje_visible": [
+    {
+      "fraccion": 0,
+      "esperado": 0
+    },
+    {
+      "fraccion": 0.1,
+      "esperado": 10
+    },
+    {
+      "fraccion": 0.075,
+      "esperado": 7.5
+    },
+    {
+      "fraccion": 1,
+      "esperado": 100
+    },
+    {
+      "fraccion": 1.5,
+      "esperado": 150
+    },
+    {
+      "fraccion": 0.12345,
+      "esperado": 12.35
+    },
+    {
+      "fraccion": -0.1,
+      "esperado": -10
+    }
+  ]
+}
