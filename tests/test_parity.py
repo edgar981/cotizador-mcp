@@ -49,7 +49,9 @@ def test_fixture_declares_its_source() -> None:
     assert source["repo"] == "cotizador-personal-shopper"
 
 
-@pytest.mark.parametrize("case", FIXTURE["calcular_cotizacion"], ids=_ids(FIXTURE["calcular_cotizacion"]))
+@pytest.mark.parametrize(
+    "case", FIXTURE["calcular_cotizacion"], ids=_ids(FIXTURE["calcular_cotizacion"])
+)
 def test_quote(case: dict[str, Any]) -> None:
     entrada = case["entrada"]
     got = quote(
@@ -82,7 +84,9 @@ def test_domestic_shipping(case: dict[str, Any]) -> None:
     assert domestic_shipping(_zone(case["zona"]), case["peso_lb"]) == case["esperado"]
 
 
-@pytest.mark.parametrize("case", FIXTURE["buscar_zona"], ids=_ids(FIXTURE["buscar_zona"], "nombre_buscado"))
+@pytest.mark.parametrize(
+    "case", FIXTURE["buscar_zona"], ids=_ids(FIXTURE["buscar_zona"], "nombre_buscado")
+)
 def test_find_zone(case: dict[str, Any]) -> None:
     got = find_zone([_zone(z) for z in case["zonas"]], case["nombre_buscado"])
     want = case["esperado"]
@@ -99,7 +103,9 @@ def test_normalize_zones(case: dict[str, Any]) -> None:
     ]
 
 
-@pytest.mark.parametrize("case", FIXTURE["calcular_comision"], ids=_ids(FIXTURE["calcular_comision"]))
+@pytest.mark.parametrize(
+    "case", FIXTURE["calcular_comision"], ids=_ids(FIXTURE["calcular_comision"])
+)
 def test_commission_split(case: dict[str, Any]) -> None:
     got = commission_split(case["margen_cop"], case["comision_pct"])
     assert got.commission_cop == case["esperado"]["comision_cop"]
