@@ -6,52 +6,19 @@ pool's. Nothing in this file talks to AWS.
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
-import jwt
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
 from mcp.server.auth.middleware.auth_context import auth_context_var
 from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 from mcp.server.auth.provider import AccessToken
 from mcp.server.mcpserver.exceptions import ToolError
 from starlette.testclient import TestClient
+from support import CONFIG, ENVELOPE, OTHER_KEY, make_token, rpc_result, verifier
 
-from cotizador_mcp.auth import READ, WRITE, AuthConfig, CognitoTokenVerifier, ScopeGuard
+from cotizador_mcp.auth import READ, WRITE, ScopeGuard
 from cotizador_mcp.server import http_app
-
-CONFIG = AuthConfig(
-    public_url="http://localhost:8000/",
-    user_pool_id="us-east-2_TESTPOOL",
-    cognito_domain="https://example-dev.auth.us-east-2.amazoncognito.com",
-    client_ids=("claude-code-client",),
-)
-KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-OTHER_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-
-def make_token(key: Any = KEY, **overrides: Any) -> str:
-    now = int(time.time())
-    claims: dict[str, Any] = {
-        "sub": "user-123",
-        "iss": CONFIG.issuer,
-        "aud": CONFIG.resource_url,
-        "client_id": "claude-code-client",
-        "token_use": "access",
-        "scope": f"{CONFIG.scope(READ)} {CONFIG.scope(WRITE)}",
-        "username": "user-123",
-        "iat": now,
-        "exp": now + 600,
-    }
-    claims.update(overrides)
-    claims = {k: v for k, v in claims.items() if v is not None}
-    return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "test"})
-
-
-def verifier() -> CognitoTokenVerifier:
-    return CognitoTokenVerifier(CONFIG, key_resolver=lambda _token: KEY.public_key())
 
 
 @pytest.fixture
@@ -142,11 +109,6 @@ def test_scope_guard_is_off_without_auth() -> None:
 
 # --- over HTTP --------------------------------------------------------------
 
-ENVELOPE = {
-    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-    "io.modelcontextprotocol/clientCapabilities": {},
-}
-
 
 @pytest.fixture
 def client() -> Any:
@@ -177,13 +139,6 @@ def call_quote(client: TestClient, token: str | None) -> Any:
         },
     }
     return client.post("/mcp", headers=headers, json=body)
-
-
-def rpc_result(response: Any) -> dict[str, Any]:
-    text = response.text
-    if response.headers.get("content-type", "").startswith("text/event-stream"):
-        text = next(line[5:] for line in text.splitlines() if line.startswith("data:"))
-    return json.loads(text)["result"]
 
 
 def test_no_token_gets_401_pointing_at_the_resource_metadata(client: TestClient) -> None:

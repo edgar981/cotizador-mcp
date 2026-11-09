@@ -50,6 +50,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from cotizador_mcp.audit import note
+
 __all__ = [
     "READ",
     "SCOPE_NAMES",
@@ -214,6 +216,7 @@ class ScopeGuard:
         token = get_access_token()
         granted = set(token.scopes) if token else set()
         if scope not in granted:
+            note(outcome="denied")
             # A ToolError, so the model is told why and can tell the user, rather
             # than retrying blindly.
             raise ToolError(

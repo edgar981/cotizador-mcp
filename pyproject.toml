@@ -8,7 +8,8 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "mcp>=2.3.0",
+    "boto3>=1.40",
+    "mcp>=2.3.0,<2.4",
     "pyjwt[crypto]>=2.10",
 ]
 
@@ -22,6 +23,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "httpx>=0.28",
+    "moto[dynamodb]>=5.1",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
 ]
