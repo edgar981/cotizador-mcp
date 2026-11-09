@@ -34,6 +34,7 @@ from cotizador_mcp.auth import (
     ScopeGuard,
     metadata_routes,
 )
+from cotizador_mcp.fx import InMemoryRateCache, RateSource
 from cotizador_mcp.pricing import (
     QuoteParams,
     commission_split,
@@ -48,6 +49,23 @@ from cotizador_mcp.settings import (
 )
 
 __all__ = ["build_server", "http_app", "main"]
+
+
+FxSource = Literal["live", "last_known", "reference"]
+FX_SOURCE_HELP = (
+    "'live': today's official rate. 'last_known': the official source was down, so "
+    "the last rate fetched was used; say how old it is (fx_valid_from). 'reference': a "
+    "fixed stand-in, NOT a real rate; the quote is arithmetically correct but not an "
+    "offer, so say so when relaying it."
+)
+
+
+class ExchangeRate(BaseModel):
+    """The official COP/USD rate (TRM) in force today."""
+
+    rate_cop_per_usd: float = Field(description="Official rate, COP per USD, before any buffer.")
+    valid_from: str = Field(description="Date this rate is valid from (YYYY-MM-DD).")
+    source: Literal["live", "last_known"] = Field(description=FX_SOURCE_HELP)
 
 
 class QuoteResult(BaseModel):
@@ -73,11 +91,9 @@ class QuoteResult(BaseModel):
 
     fx_official: float = Field(description="Official COP-per-USD rate used.")
     fx_applied: float = Field(description="Rate after the buffer, used to convert.")
-    fx_source: Literal["reference", "live"] = Field(
-        description=(
-            "'reference' means a stand-in rate, NOT today's rate: the quote is "
-            "arithmetically correct but not a real offer. Say so when relaying it."
-        )
+    fx_source: FxSource = Field(description=FX_SOURCE_HELP)
+    fx_valid_from: str | None = Field(
+        default=None, description="Date the official rate was valid from (YYYY-MM-DD)."
     )
 
     commission_cop: float = Field(description="Operator commission, taken from the margin.")
@@ -104,12 +120,14 @@ class QuoteResult(BaseModel):
 def build_server(
     auth: AuthConfig | None = None,
     token_verifier: TokenVerifier | None = None,
+    rates: RateSource | None = None,
 ) -> MCPServer:
     """Construct the server. Separate from :func:`main` so tests can drive it.
 
     With ``auth``, every HTTP request needs a Cognito access token for this server,
     and each tool checks its own scope. ``token_verifier`` replaces the Cognito
-    verifier (tests sign their own tokens).
+    verifier (tests sign their own tokens). ``rates`` is the official exchange-rate
+    source; without one the server is offline and quotes use the reference rate.
     """
     if auth is not None and token_verifier is None:
         token_verifier = CognitoTokenVerifier(auth)
@@ -121,11 +139,41 @@ def build_server(
         instructions=(
             "Prices US retail products for import into Colombia. Quotes are "
             "deterministic arithmetic over a reference configuration; they are "
-            "not offers. Relay the price together with its fx_source."
+            "not offers. Relay the price together with its fx_source; when it is "
+            "not 'live', say what that means."
         ),
         token_verifier=token_verifier if auth else None,
         auth=auth.settings() if auth else None,
     )
+
+    def current_rate() -> tuple[float, FxSource, str | None]:
+        rate = rates.current() if rates else None
+        if rate is None:
+            return REFERENCE_FX_OFFICIAL, "reference", None
+        return rate.value, ("last_known" if rate.stale else "live"), rate.valid_from
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            read_only_hint=True,
+            # Not idempotent in the strict sense: the answer changes once a day.
+            idempotent_hint=False,
+            open_world_hint=True,
+        ),
+    )
+    def get_exchange_rate() -> ExchangeRate:
+        """Get the official COP-per-USD rate (TRM) in force today, with its validity date."""
+        guard.require(READ)
+        rate = rates.current() if rates else None
+        if rate is None:
+            raise ToolError(
+                "The official exchange rate is unavailable right now and none is cached. "
+                "Quotes will use the reference stand-in rate."
+            )
+        return ExchangeRate(
+            rate_cop_per_usd=rate.value,
+            valid_from=rate.valid_from,
+            source="last_known" if rate.stale else "live",
+        )
 
     @server.tool(
         annotations=ToolAnnotations(
@@ -184,13 +232,14 @@ def build_server(
                 f"Need weight_lb, or a category among: {known}. Got category={category!r}."
             )
 
+        fx_official, fx_source, fx_valid_from = current_rate()
         breakdown = quote(
             QuoteParams(
                 price_usd=price_usd,
                 weight_lb=resolved_weight,
                 sales_tax_pct=REFERENCE.sales_tax_pct,
                 carrier_rate_lb_usd=REFERENCE.carrier_rate_lb_usd,
-                fx_official=REFERENCE_FX_OFFICIAL,
+                fx_official=fx_official,
                 fx_buffer_pct=REFERENCE.fx_buffer_pct,
                 margin_pct=REFERENCE.margin_pct,
                 rounding_cop=REFERENCE.rounding_cop,
@@ -218,9 +267,10 @@ def build_server(
             landed_usd=breakdown.landed_usd,
             weight_lb=resolved_weight,
             weight_source=weight_source,
-            fx_official=REFERENCE_FX_OFFICIAL,
+            fx_official=fx_official,
             fx_applied=breakdown.fx_applied,
-            fx_source="reference",
+            fx_source=fx_source,
+            fx_valid_from=fx_valid_from,
             commission_cop=split.commission_cop,
             net_margin_cop=split.net_margin_cop,
             domestic_shipping_cop=domestic_cop,
@@ -235,9 +285,10 @@ def http_app(
     *,
     host: str = "127.0.0.1",
     token_verifier: TokenVerifier | None = None,
+    rates: RateSource | None = None,
 ) -> Starlette:
     """The ASGI app for the HTTP transport: what uvicorn serves locally and Lambda runs."""
-    server = build_server(auth, token_verifier)
+    server = build_server(auth, token_verifier, rates)
     # See the module docstring: stateless is the deployment story.
     app = server.streamable_http_app(stateless_http=True, host=host)
     if auth is not None:
@@ -269,8 +320,9 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
+    rates = RateSource(InMemoryRateCache())
     if args.transport == "stdio":
-        build_server().run("stdio")
+        build_server(rates=rates).run("stdio")
         return
 
     env = dict(os.environ)
@@ -284,7 +336,7 @@ def main() -> None:
 
     import uvicorn
 
-    uvicorn.run(http_app(auth, host=args.host), host=args.host, port=args.port)
+    uvicorn.run(http_app(auth, host=args.host, rates=rates), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

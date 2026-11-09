@@ -68,7 +68,8 @@ CATEGORY_WEIGHTS_LB: Mapping[str, float] = MappingProxyType(
     }
 )
 
-#: Stand-in COP-per-USD rate, used only until the live TRM source (M3) lands.
-#: A quote carrying this rate is labelled ``fx_source="reference"`` so that
-#: neither an agent nor a reader can mistake it for today's number.
+#: Stand-in COP-per-USD rate, used only when there is no official rate at all:
+#: the server runs offline, or the official source is down and nothing is cached.
+#: A quote carrying it is labelled ``fx_source="reference"`` so that neither an
+#: agent nor a reader can mistake it for today's number.
 REFERENCE_FX_OFFICIAL = 4000.0

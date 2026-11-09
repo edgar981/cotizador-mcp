@@ -49,8 +49,8 @@ async def test_tool_is_advertised_as_read_only_with_schemas():
     async with Client(build_server()) as client:
         tools = (await client.list_tools()).tools
 
-    assert [t.name for t in tools] == ["quote_product"]
-    tool = tools[0]
+    assert sorted(t.name for t in tools) == ["get_exchange_rate", "quote_product"]
+    tool = next(t for t in tools if t.name == "quote_product")
     assert tool.annotations.read_only_hint is True
     assert tool.annotations.idempotent_hint is True
     assert tool.annotations.open_world_hint is False
