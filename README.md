@@ -10,7 +10,8 @@ scoped OAuth, an audit record per call, and idempotent writes. All of it runs on
 AWS serverless, deployed with CDK.
 
 > **Status: built and tested; not yet deployed.** All four tools run locally over stdio
-> and stateless HTTP, with Cognito OAuth. The AWS stack synthesizes, and CI is written.
+> and stateless HTTP, and Claude Code signs in to the HTTP server through Cognito. The
+> AWS stack synthesizes, and CI is written.
 > Two things wait on the AWS account: Bedrock access for `extract_product`, and the
 > first deploy. [Open items](#open-items) lists what is still unproven.
 
@@ -22,9 +23,9 @@ AWS serverless, deployed with CDK.
 | M2 | Pricing engine ported from TypeScript, with parity tests | **Done** |
 | M3 | Official COP/USD rate (TRM), cached daily, last-known fallback | **Done** |
 | M4 | Tools: `quote_product` · `get_exchange_rate` · `extract_product` · `save_quote` | **Done** (`extract_product` not yet run live) |
-| M5 | Local run over stdio and stateless Streamable HTTP | **Done** |
+| M5 | Local run over stdio and stateless Streamable HTTP | **Done** (screenshot to quote waits on `extract_product`) |
 | M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | Synthesized, not deployed |
-| M7 | OAuth 2.1 with Cognito; scope per tool | **Done** locally; Claude Code sign-in pending |
+| M7 | OAuth 2.1 with Cognito; scope per tool | **Done**; Claude Code signs in end to end (local) |
 | M8 | Audit trail: one DynamoDB record per tool call | **Done** |
 | M9 | CI/CD with GitHub Actions and OIDC deploy roles | Written; runs once the repo is on GitHub |
 | M10 | This README | **Done** |
@@ -297,8 +298,6 @@ Every decision, with its reasons and the gotchas found along the way, is in
 
 ## Open items
 
-- **Claude Code sign-in, end to end.** Every piece is tested separately, and Cognito
-  accepts the exact authorize request; the full browser flow has not been run yet.
 - **`extract_product` live.** The request reaches Bedrock correctly signed; the new
   AWS account is still blocked from calling Claude models (a support case is open).
 - **First deploy.** API Gateway's 401 cannot carry the `resource_metadata` challenge,

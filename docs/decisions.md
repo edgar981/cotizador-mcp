@@ -7,7 +7,7 @@ instead of week 1. Written as it was resolved, with the source that settled it.
 
 ## R1 — How do MCP clients register with the authorization server?
 
-**Status:** decided, proof pending.
+**Status:** decided and proved (2026-11-09).
 
 The MCP authorization spec expects a client to obtain credentials in this order:
 
@@ -29,8 +29,8 @@ can write should not let arbitrary clients register themselves.
 connectors, some third-party clients) will not connect without an operator
 creating an app client for them first. The README says so rather than hiding it.
 
-**Still to prove:** Claude Code → local server → Cognito, end to end, before any
-CDK is written. Until that runs, this decision is research, not fact.
+**Proof required:** Claude Code → local server → Cognito, end to end. Until that
+ran, this decision was research, not fact (proof below).
 
 **What building it showed (2026-11-08).** Three Cognito facts shaped the server,
 each found by probing the real pool rather than from documentation:
@@ -58,6 +58,16 @@ each found by probing the real pool rather than from documentation:
 
 Claude Code is registered as a **public client** (no secret, PKCE), which is the
 right shape for a native app and means no client secret exists to leak.
+
+**Proof (2026-11-09).** Registered with
+`claude mcp add --transport http --client-id <id> --callback-port 8765`, Claude Code
+took the 401 challenge to the Protected Resource Metadata, read the
+authorization-server metadata the server publishes, opened Cognito's managed login,
+and came back with a token the server accepted. That token passed the audience check,
+so Claude Code sends the RFC 8707 `resource` parameter and Cognito bound the token to
+the MCP URL. It then called `quote_product` and `save_quote`; both audit records name
+the app client, the user's `sub`, and both scopes. A read-only token being refused by
+`save_quote` is covered by tests, not yet by a live client.
 
 ---
 
