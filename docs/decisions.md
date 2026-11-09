@@ -32,6 +32,33 @@ creating an app client for them first. The README says so rather than hiding it.
 **Still to prove:** Claude Code → local server → Cognito, end to end, before any
 CDK is written. Until that runs, this decision is research, not fact.
 
+**What building it showed (2026-11-08).** Three Cognito facts shaped the server,
+each found by probing the real pool rather than from documentation:
+
+1. **Cognito's metadata omits `code_challenge_methods_supported`.** Its OIDC
+   discovery document lists no PKCE methods (and only `client_secret_*` token auth),
+   and it serves nothing at the RFC 8414 paths. The MCP spec says a client *must
+   refuse* to proceed without that field. So the server publishes the
+   authorization-server metadata itself at `/.well-known/oauth-authorization-server`:
+   Cognito's own authorize/token/revoke endpoints, plus `S256` and `none`. Tokens are
+   still issued and signed by Cognito and verified against Cognito's issuer and keys.
+   This is the "thin shim" the brief anticipated, at the metadata level only: no
+   tokens pass through it.
+2. **Resource binding works, with a condition.** Cognito accepts the RFC 8707
+   `resource` parameter (https, or `http://localhost`) and puts it in the access
+   token's `aud`, so the server can refuse tokens minted for any other API. But it
+   only binds a token to scopes of the resource server whose identifier *is* that
+   resource: "custom scopes requested for resource-binding must be assigned to the
+   resource being requested". So the resource-server identifier is the MCP URL, and
+   scopes read `http://localhost:8000/mcp/quotes:read`. Each environment has its own
+   resource server. The match is exact: a trailing slash fails.
+3. **A scope the client is not allowed is an error, not dropped**
+   (`invalid_scope`). Scopes advertised in Protected Resource Metadata must
+   therefore be scopes every intended client is allowed to request.
+
+Claude Code is registered as a **public client** (no secret, PKCE), which is the
+right shape for a native app and means no client secret exists to leak.
+
 ---
 
 ## R2 — Which revision of the MCP spec do we target?
@@ -126,6 +153,32 @@ needs a paid support plan. What remains is a console support case, which the
 Basic plan allows. Check the quota before debugging IAM:
 `aws service-quotas list-service-quotas --service-code bedrock` and look at the
 model's cross-region tokens-per-minute value.
+
+**Update, later the same day: two Bedrock surfaces, and the model choice.** Claude
+on Bedrock is served two ways, and they have separate model lists and quotas:
+
+| | Legacy (`bedrock-runtime`) | Claude in Amazon Bedrock (`bedrock-mantle`) |
+| --- | --- | --- |
+| API | `Converse` / `InvokeModel`, ARN-versioned IDs | Anthropic Messages API at `/anthropic/v1/messages` |
+| Models | Opus 4.6 and earlier (incl. Sonnet 4.6, the web app's model) | Opus 4.7 and later (`anthropic.claude-opus-5-5`, ...) |
+| IAM | `bedrock:InvokeModel` on profile + model ARNs | `bedrock-mantle:CreateInference` on model ARNs |
+| Quota | per model, **0** on this account | default 2M input TPM |
+
+`extract_product` targets the newer surface through Anthropic's own SDK
+(`AnthropicBedrockMantle`), with structured output instead of the web app's JSON
+scraping. Default model `anthropic.claude-opus-5-5`, effort `medium`; a refusal is
+retried on `anthropic.claude-opus-4-8` by the SDK's client-side fallback middleware
+(Bedrock has no server-side fallback). All three are environment settings.
+
+Two things the probe found that the documentation does not say:
+
+- **Region.** From this account, `us-east-2` lists only Haiku 4.5 on the newer
+  surface; `us-east-1` lists Opus 5.5, Opus 5, Sonnet 5, Opus 4.8/4.7, Fable 5 and
+  Haiku 4.5. So the stack stays in `us-east-2` (R5) and only the Bedrock client
+  points at `us-east-1`. Data stays in the US.
+- **Access.** Every Claude model on the newer surface answers 403 "not available for
+  this account", including models documented as open to all Bedrock customers. Same
+  new-account gate as the zero quota; the support case covers both.
 
 ---
 
