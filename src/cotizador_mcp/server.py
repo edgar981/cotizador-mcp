@@ -21,11 +21,13 @@ import os
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 from starlette.applications import Starlette
@@ -505,8 +507,18 @@ def http_app(
 ) -> Starlette:
     """The ASGI app for the HTTP transport: what uvicorn serves locally and Lambda runs."""
     server = build_server(auth, token_verifier, rates, store, audit_sink, extractor)
+    # The SDK's DNS-rebinding guard defaults to loopback-only Host headers when bound
+    # to 127.0.0.1, which is also how uvicorn runs behind the Lambda Web Adapter.
+    # Behind API Gateway the Host is the public one, so allow exactly that host.
+    security = None
+    if auth is not None:
+        public = urlsplit(auth.public_url)
+        if not _is_loopback(public.hostname or ""):
+            security = TransportSecuritySettings(
+                allowed_hosts=[public.netloc], allowed_origins=[auth.public_url]
+            )
     # See the module docstring: stateless is the deployment story.
-    app = server.streamable_http_app(stateless_http=True, host=host)
+    app = server.streamable_http_app(stateless_http=True, host=host, transport_security=security)
     if auth is not None:
         # The SDK publishes Protected Resource Metadata listing only the scopes the
         # endpoint itself requires (read). Clients request what that document lists,
