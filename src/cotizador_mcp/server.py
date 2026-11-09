@@ -15,13 +15,25 @@ legitimately land on different instances.
 from __future__ import annotations
 
 import argparse
+import ipaddress
+import os
 from typing import Annotated, Literal
 
+from mcp.server.auth.provider import TokenVerifier
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
+from starlette.applications import Starlette
 
+from cotizador_mcp.auth import (
+    PRM_PATH,
+    READ,
+    AuthConfig,
+    CognitoTokenVerifier,
+    ScopeGuard,
+    metadata_routes,
+)
 from cotizador_mcp.pricing import (
     QuoteParams,
     commission_split,
@@ -35,7 +47,7 @@ from cotizador_mcp.settings import (
     REFERENCE_FX_OFFICIAL,
 )
 
-__all__ = ["build_server", "main"]
+__all__ = ["build_server", "http_app", "main"]
 
 
 class QuoteResult(BaseModel):
@@ -89,8 +101,19 @@ class QuoteResult(BaseModel):
     )
 
 
-def build_server() -> MCPServer:
-    """Construct the server. Separate from :func:`main` so tests can drive it."""
+def build_server(
+    auth: AuthConfig | None = None,
+    token_verifier: TokenVerifier | None = None,
+) -> MCPServer:
+    """Construct the server. Separate from :func:`main` so tests can drive it.
+
+    With ``auth``, every HTTP request needs a Cognito access token for this server,
+    and each tool checks its own scope. ``token_verifier`` replaces the Cognito
+    verifier (tests sign their own tokens).
+    """
+    if auth is not None and token_verifier is None:
+        token_verifier = CognitoTokenVerifier(auth)
+    guard = ScopeGuard(auth)
     server = MCPServer(
         name="cotizador",
         title="Cotizador",
@@ -100,6 +123,8 @@ def build_server() -> MCPServer:
             "deterministic arithmetic over a reference configuration; they are "
             "not offers. Relay the price together with its fx_source."
         ),
+        token_verifier=token_verifier if auth else None,
+        auth=auth.settings() if auth else None,
     )
 
     @server.tool(
@@ -143,6 +168,7 @@ def build_server() -> MCPServer:
         Supply either weight_lb or a known category. The domestic leg is
         returned separately and is never folded into the published price.
         """
+        guard.require(READ)
         if weight_lb is not None:
             resolved_weight, weight_source = float(weight_lb), "given"
         elif category and category.strip().lower() in CATEGORY_WEIGHTS_LB:
@@ -204,6 +230,38 @@ def build_server() -> MCPServer:
     return server
 
 
+def http_app(
+    auth: AuthConfig | None,
+    *,
+    host: str = "127.0.0.1",
+    token_verifier: TokenVerifier | None = None,
+) -> Starlette:
+    """The ASGI app for the HTTP transport: what uvicorn serves locally and Lambda runs."""
+    server = build_server(auth, token_verifier)
+    # See the module docstring: stateless is the deployment story.
+    app = server.streamable_http_app(stateless_http=True, host=host)
+    if auth is not None:
+        # The SDK publishes Protected Resource Metadata listing only the scopes the
+        # endpoint itself requires (read). Clients request what that document lists,
+        # so a client could then never obtain write. Replace it with the shim's
+        # version, which lists every scope and points at the metadata shim.
+        app.router.routes[:] = [
+            route
+            for route in app.router.routes
+            if not getattr(route, "path", "").startswith(PRM_PATH)
+        ] + metadata_routes(auth)
+    return app
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the cotizador MCP server.")
     parser.add_argument("--transport", choices=["stdio", "http"], default="stdio")
@@ -211,17 +269,22 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
-    server = build_server()
     if args.transport == "stdio":
-        server.run("stdio")
-    else:
-        server.run(
-            "streamable-http",
-            host=args.host,
-            port=args.port,
-            # See the module docstring: stateless is the deployment story.
-            stateless_http=True,
+        build_server().run("stdio")
+        return
+
+    env = dict(os.environ)
+    env.setdefault("COTIZADOR_PUBLIC_URL", f"http://localhost:{args.port}")
+    auth = AuthConfig.from_env(env)
+    if auth is None and not _is_loopback(args.host):
+        parser.error(
+            "Refusing to serve HTTP beyond this machine without auth. "
+            "Set COTIZADOR_COGNITO_POOL_ID (see README) or bind to 127.0.0.1."
         )
+
+    import uvicorn
+
+    uvicorn.run(http_app(auth, host=args.host), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

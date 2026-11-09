@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=2.3.0",
+    "pyjwt[crypto]>=2.10",
 ]
 
 [project.scripts]
@@ -20,6 +21,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
 ]
