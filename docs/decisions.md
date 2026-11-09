@@ -161,7 +161,7 @@ on Bedrock is served two ways, and they have separate model lists and quotas:
 | --- | --- | --- |
 | API | `Converse` / `InvokeModel`, ARN-versioned IDs | Anthropic Messages API at `/anthropic/v1/messages` |
 | Models | Opus 4.6 and earlier (incl. Sonnet 4.6, the web app's model) | Opus 4.7 and later (`anthropic.claude-opus-5-5`, ...) |
-| IAM | `bedrock:InvokeModel` on profile + model ARNs | `bedrock-mantle:CreateInference` on model ARNs |
+| IAM | `bedrock:InvokeModel` on profile + model ARNs | `bedrock-mantle:CreateInference` on a *project* (`arn:aws:bedrock-mantle:<region>:<account>:project/default`) |
 | Quota | per model, **0** on this account | default 2M input TPM |
 
 `extract_product` targets the newer surface through Anthropic's own SDK
@@ -252,6 +252,37 @@ Four email alerts: actual spend over 20 %, 85 % and 100 %, and forecast over
 cents a month, and the account has no free credits — the 85 % alert would only
 fire at USD 4.25, long after something started going wrong. USD 1 is the alert
 that means "look now".
+
+---
+
+## R8 — How it runs on AWS
+
+**Status:** decided and synthesized (`cdk synth`); not deployed. Deploying is Edgar's call.
+
+- **Lambda Web Adapter, not a Lambda-specific handler.** uvicorn serves the same
+  Starlette app as `--transport http`; the adapter turns API Gateway events into HTTP.
+  What runs in AWS is the code path the tests and local runs exercise. Layer pinned
+  (1.1.0, arm64).
+- **Packaging without Docker.** `uv pip install --python-platform aarch64-manylinux2014
+  --only-binary :all:` builds the asset on any machine, CI included (75 MB unzipped).
+- **The API URL is the OAuth resource.** API → Cognito resource server → app client →
+  Lambda environment is a dependency chain with no cycle, because routes are added
+  after the function. No custom domain is needed for the demo.
+- **Two gates.** API Gateway's JWT authorizer (issuer, audience, read scope) rejects
+  bad tokens before a Lambda runs; the server checks again, including per-tool
+  scopes. **Known cost:** an HTTP API authorizer's 401 cannot carry the
+  `resource_metadata` challenge the server sends. MCP clients must then fall back to
+  the well-known metadata URLs, which are public routes here. To verify on the
+  first deploy, with Claude Code against the remote URL.
+- **Bedrock IAM is scoped to one project in one region, not to one model.** On the
+  newer Bedrock surface the authorized resource is the project; restricting to a model
+  needs a condition key not yet verified here, and a wrong key would silently deny
+  every call. Narrower is a follow-up, not a guess.
+- **Cost caps:** stage throttling (5 rps, burst 10). The account's Lambda concurrency
+  limit is 10, so reserved concurrency cannot be used (it must leave 10 unreserved).
+- **CI/CD without keys.** GitHub's OIDC provider; a *diff* role trusted from pull
+  requests and a *deploy* role trusted only from `main`, each limited to assuming the
+  CDK bootstrap roles. Actions are pinned to commit SHAs.
 
 ---
 
