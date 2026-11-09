@@ -16,6 +16,12 @@ concurrency:
 jobs:
   checks:
     uses: ./.github/workflows/ci.yml
+    # A ceiling, not a grant: GitHub refuses to start the run unless the caller allows
+    # every permission a called job declares. Only ci.yml's `diff` job asks for
+    # id-token, and it runs on pull requests only; `test` and `synth` keep contents: read.
+    permissions:
+      contents: read
+      id-token: write
 
   deploy:
     if: vars.AWS_DEPLOY_ROLE_ARN != ''
