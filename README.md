@@ -9,32 +9,60 @@ the tools: typed schemas, read-only annotations, errors the model can act on,
 scoped OAuth, an audit record per call, and idempotent writes. All of it runs on
 AWS serverless, deployed with CDK.
 
-> **Status: week 1 of 3.** The pricing engine and `quote_product` run locally over
-> stdio and stateless HTTP. Everything marked *planned* below is not built yet.
+> **Status: built and tested; not yet deployed.** All four tools run locally over stdio
+> and stateless HTTP, with Cognito OAuth. The AWS stack synthesizes, and CI is written.
+> Two things wait on the AWS account: Bedrock access for `extract_product`, and the
+> first deploy. [Open items](#open-items) lists what is still unproven.
 
 ## Status
 
 | | Deliverable | State |
 | --- | --- | --- |
-| M1 | Scaffold: Python 3.12, uv, `mcp` SDK, pytest, ruff | Done locally; CI planned |
+| M1 | Scaffold: Python 3.12, uv, `mcp` SDK, pytest, ruff | **Done** |
 | M2 | Pricing engine ported from TypeScript, with parity tests | **Done** |
-| M3 | Exchange-rate source (official COP/USD rate, cached daily) | Planned |
-| M4 | Tools: `quote_product` · `get_exchange_rate` · `extract_product` · `save_quote` | `quote_product` **done**; rest planned |
+| M3 | Official COP/USD rate (TRM), cached daily, last-known fallback | **Done** |
+| M4 | Tools: `quote_product` · `get_exchange_rate` · `extract_product` · `save_quote` | **Done** (`extract_product` not yet run live) |
 | M5 | Local run over stdio and stateless Streamable HTTP | **Done** |
-| M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM | Planned |
-| M7 | OAuth 2.1 with Cognito; scopes enforced per tool | Planned |
-| M8 | Audit trail: one DynamoDB record per tool call | Planned |
-| M9 | CI/CD with GitHub Actions and an OIDC deploy role | Planned |
-| M10 | This README | In progress |
+| M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | Synthesized, not deployed |
+| M7 | OAuth 2.1 with Cognito; scope per tool | **Done** locally; Claude Code sign-in pending |
+| M8 | Audit trail: one DynamoDB record per tool call | **Done** |
+| M9 | CI/CD with GitHub Actions and OIDC deploy roles | Written; runs once the repo is on GitHub |
+| M10 | This README | **Done** |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    client["MCP client<br/>(Claude Code)"]
+    subgraph aws["AWS · us-east-2"]
+        apigw["API Gateway HTTP API<br/>JWT authorizer · throttling · access logs"]
+        fn["Lambda (arm64)<br/>MCP server, stateless HTTP<br/>behind the Lambda Web Adapter"]
+        cognito["Cognito user pool<br/>managed login · PKCE"]
+        ddb[("DynamoDB<br/>quotes · audit · fx_rates")]
+        cw["CloudWatch<br/>logs 30 d · error alarm"]
+    end
+    bedrock["Claude on Amazon Bedrock<br/>(us-east-1)"]
+    trm["datos.gov.co<br/>official TRM"]
+
+    client -- "sign in (browser)" --> cognito
+    client -- "POST /mcp + bearer token" --> apigw --> fn
+    fn --> ddb
+    fn --> bedrock
+    fn --> trm
+    fn --> cw
+```
+
+The server is stateless by protocol (MCP revision 2026-07-28 has no sessions), so any
+Lambda instance can answer any request and nothing is kept between invocations.
 
 ## Tools
 
-| Tool | Kind | What it does | State |
+| Tool | Scope | Kind | What it does |
 | --- | --- | --- | --- |
-| `quote_product` | read-only, deterministic | US price + category or weight → published COP price, full breakdown, optional domestic shipping estimate | **Available** |
-| `get_exchange_rate` | read-only | Today's official COP/USD rate, with its validity date | Planned |
-| `extract_product` | read-only | Product name, price and category from a screenshot (Claude on Bedrock, schema-enforced output) | Planned |
-| `save_quote` | write, idempotent | Stores a quote; the same idempotency key returns the same record | Planned |
+| `quote_product` | `quotes:read` | read-only, deterministic | US price + category or weight → published COP price with the full breakdown and an optional domestic-shipping estimate |
+| `get_exchange_rate` | `quotes:read` | read-only | Today's official COP/USD rate, with its validity date, and whether it is live or the last one known |
+| `extract_product` | `quotes:read` | read-only, calls a model | Name, current price, brand and category from a screenshot (Claude on Bedrock, schema-enforced output) |
+| `save_quote` | `quotes:write` | write, idempotent | Recomputes the quote server-side and stores it once per caller and idempotency key |
 
 ### `quote_product`
 
@@ -43,12 +71,7 @@ AWS serverless, deployed with CDK.
 | `price_usd` | yes | Must be greater than 0 |
 | `category` | no | One of `tenis`, `ropa`, `perfume`, `bolso`, `maquillaje`, `reloj`, `suplementos`. Supplies a typical weight |
 | `weight_lb` | no | Wins over the category's weight when both are given |
-| `zone` | no | `Bogotá`, `Ciudades principales`, `Resto del país`, `Municipio`. Adds a domestic shipping estimate |
-
-Either `weight_lb` or a known `category` is required. If neither is given, the tool
-returns an error naming what is missing. The same happens for an unknown zone.
-
-The computation runs in this order:
+| `zone` | no | `Bogotá`, `Ciudades principales`, `Resto del país`, `Municipio`. Adds a domestic-shipping estimate |
 
 1. Add US sales tax and freight (per-pound tariff × weight) to get the landed cost in USD.
 2. Convert at the official rate plus a buffer.
@@ -56,32 +79,121 @@ The computation runs in this order:
 4. Round up to the next 5,000 COP.
 
 The commission is a share of the margin, so it never changes the price. The
-domestic shipping estimate is returned separately and is never part of
-`price_cop`.
+domestic-shipping estimate is returned separately and is never part of `price_cop`.
 
-Example: 120 USD sneakers, delivered in Bogotá. These are the real values from
-MCP Inspector:
+Example: 120 USD sneakers, delivered in Bogotá, with the reference rate (real output
+from MCP Inspector, abridged):
 
 ```json
 {
   "price_cop": 735000,
   "landed_usd": 144,
   "fx_applied": 4080,
-  "cost_cop": 587520,
   "margin_cop": 146880,
   "commission_cop": 14688,
-  "net_margin_cop": 132192,
   "domestic_shipping_cop": 16000,
-  "weight_source": "category",
   "fx_source": "reference",
   "settings_source": "reference"
 }
 ```
 
-`fx_source` and `settings_source` are there so the agent can tell the user what
-kind of number it is. Every value here is a public reference value, not the
-business's real configuration, and the exchange rate is a fixed stand-in until
-M3 lands.
+`fx_source` says which rate a quote used: `live` (today's official rate),
+`last_known` (the source was down; `fx_valid_from` says how old it is) or `reference`
+(a fixed stand-in, not a real rate). `settings_source` is always `reference`: margins,
+tariffs, tax and commission are public reference values, not the business's real
+configuration.
+
+## Auth
+
+```mermaid
+sequenceDiagram
+    participant C as Claude Code
+    participant S as MCP server
+    participant G as Cognito
+    C->>S: POST /mcp (no token)
+    S-->>C: 401 WWW-Authenticate: resource_metadata=…
+    C->>S: GET /.well-known/oauth-protected-resource/mcp
+    S-->>C: resource, authorization server, scopes
+    C->>S: GET /.well-known/oauth-authorization-server
+    S-->>C: Cognito's endpoints + PKCE S256
+    C->>G: authorize (PKCE, scopes, resource=<server URL>)
+    G-->>C: code (after the user signs in)
+    C->>G: token (code + verifier)
+    G-->>C: access token, aud = <server URL>
+    C->>S: POST /mcp, Bearer token
+    S->>S: verify signature, iss, aud, client, scope per tool
+```
+
+- **Cognito is the authorization server; this server is the resource server.** It
+  verifies each token against the pool's keys: issuer, `aud`, access-token use,
+  registered client, expiry.
+- **Tokens are bound to this server.** Clients send the RFC 8707 `resource`
+  parameter and Cognito writes it into `aud`, so a token minted for another API in
+  the same pool is refused.
+- **Scopes per tool.** Every call needs `quotes:read`; `save_quote` also needs
+  `quotes:write`. A token without it gets a tool error that names the missing scope,
+  and the refusal is audited as `denied`.
+- **Pre-registered clients.** Cognito has no dynamic client registration, which is
+  the right posture anyway for a server with a write tool. Claude Code connects with
+  a client id; it is a public client (PKCE, no secret).
+- **A metadata shim.** Cognito's published metadata omits
+  `code_challenge_methods_supported`, without which MCP clients must refuse to
+  connect. The server publishes that document itself, pointing at Cognito's own
+  endpoints. No token passes through it. Decision R1 has the details.
+
+## Audit trail
+
+Server middleware writes one record per `tools/call`, so a new tool is audited from
+the moment it is registered. Each record holds:
+
+- the OAuth `client_id`, `sub` and scopes;
+- the tool, the argument *names*, and a SHA-256 of the arguments (never their values,
+  so no images and no product data);
+- the outcome: `ok`, `error`, `denied`, `replayed` or `crash`;
+- latency, and model tokens for `extract_product`.
+
+Records expire after 90 days (DynamoDB TTL). Each one is also logged as a JSON line,
+so a failed table write still leaves a trail.
+
+Every `save_quote` call by one client today:
+
+```bash
+aws dynamodb query --table-name "$AUDIT_TABLE" --key-condition-expression "client_id = :c AND begins_with(sk, :d)" --filter-expression "tool = :t" --expression-attribute-values '{":c":{"S":"<client-id>"},":d":{"S":"2026-11-08"},":t":{"S":"save_quote"}}'
+```
+
+Every call of one tool across clients uses the `by_tool` index instead.
+
+## Threat model
+
+| Threat | Mitigation |
+| --- | --- |
+| Stolen or replayed token | 60-minute access tokens bound to this server (`aud`); refresh tokens revocable; every call audited with `sub` and `client_id` |
+| Token minted for another API | Audience must equal this server's URL, checked by API Gateway and again by the server |
+| Scope escalation | Endpoint requires `quotes:read`; `save_quote` checks `quotes:write` itself; scopes advertised are exactly those clients may request |
+| Rogue client registration | No dynamic registration; operators create app clients; self sign-up is off |
+| Prompt injection through a screenshot | The system prompt marks image text as data; output is schema-constrained and re-validated (known category, positive price, length caps, control characters stripped); string fields are described to the calling agent as untrusted |
+| Agent saves a made-up price | `save_quote` takes product inputs, never a price, and recomputes on the server |
+| Duplicate writes on retry | Idempotency key per caller; same key returns the original save; reuse with different inputs is refused |
+| SSRF through image URLs | URLs are not accepted; images are base64, at most 5 MB, and must match their declared type's magic bytes |
+| Leaking internals in errors | Unexpected exceptions reach the model as a generic error; details stay in the logs |
+| Cost abuse | Stage throttling (5 rps, burst 10); USD 5 budget with alerts from USD 1 |
+| DNS rebinding against a local server | Host header checked: loopback only locally, the public host only in AWS |
+
+## Cost
+
+At demo volume, a few hundred calls a month:
+
+| Item | Monthly |
+| --- | --- |
+| Lambda (arm64, 1 GB, ~0.3 s a call) | < USD 0.01 |
+| API Gateway HTTP API | < USD 0.01 |
+| DynamoDB on demand, point-in-time recovery on quotes | < USD 0.05 |
+| Cognito Essentials (first 10,000 monthly users free) | USD 0 |
+| CloudWatch Logs, one alarm | ~ USD 0.10 |
+| Claude on Bedrock: one model call per screenshot, about 1,500 tokens in and 300 out | about 1–2 cents per screenshot |
+
+An account-level AWS Budget of USD 5 alerts at USD 1, 4.25 and 5, and on a forecast
+over 5 (decision R7).
 
 ## Run it locally
 
@@ -89,6 +201,9 @@ You need [uv](https://docs.astral.sh/uv/). It installs the right Python by itsel
 
 ```bash
 uv sync
+```
+
+```bash
 uv run pytest
 ```
 
@@ -98,14 +213,20 @@ uv run pytest
 uv run cotizador-mcp
 ```
 
-**Stateless Streamable HTTP**, the same mode the Lambda will run in, served at
-`http://127.0.0.1:8000/mcp`:
+**Stateless HTTP without auth** (refused on anything but 127.0.0.1):
 
 ```bash
 uv run cotizador-mcp --transport http --port 8000
 ```
 
-**MCP Inspector** can list the tools and call one without an AI client:
+**Stateless HTTP with Cognito**: copy `.env.example` to `.env.dev`, fill in a user
+pool, then:
+
+```bash
+set -a && source .env.dev && set +a && uv run cotizador-mcp --transport http --port 8000
+```
+
+**MCP Inspector** lists and calls the tools without an AI client:
 
 ```bash
 npx -y @modelcontextprotocol/inspector@2.14.0 --cli uv run cotizador-mcp --method tools/list
@@ -115,68 +236,74 @@ npx -y @modelcontextprotocol/inspector@2.14.0 --cli uv run cotizador-mcp --metho
 npx -y @modelcontextprotocol/inspector@2.14.0 --cli uv run cotizador-mcp --method tools/call --tool-name quote_product --tool-arg price_usd=120 --tool-arg category=tenis
 ```
 
-**Claude Code** can connect over stdio. Run this from the repository root:
+`extract_product` calls Claude on Bedrock with your AWS credentials (`aws login`
+works). Without Bedrock access it says so and asks the agent to collect the details
+from the user.
+
+## Connect from Claude Code
+
+Over stdio, from the repository root:
 
 ```bash
 claude mcp add cotizador -- uv run --directory "$PWD" cotizador-mcp
 ```
 
-It can also connect to the HTTP server running locally:
+Over HTTP with OAuth (local server or the deployed URL), using the Cognito app
+client id. Claude Code opens the browser for the sign-in:
 
 ```bash
-claude mcp add --transport http cotizador http://127.0.0.1:8000/mcp
+claude mcp add --transport http --client-id <app-client-id> --callback-port 8765 cotizador <server-url>/mcp
 ```
+
+## Deploy
+
+Deploying creates billable resources; at demo volume they cost cents a month.
+
+1. Bootstrap CDK in the account and region (once):
+   ```bash
+   npx -y aws-cdk@2.1148.0 bootstrap aws://<account>/us-east-2
+   ```
+2. Deploy the CI roles (once), then set the repository variables `AWS_DIFF_ROLE_ARN`,
+   `AWS_DEPLOY_ROLE_ARN` and `ALARM_EMAIL` from its outputs:
+   ```bash
+   npx -y aws-cdk@2.1148.0 deploy CotizadorMcpCi
+   ```
+3. From then on, a merge to `main` deploys `CotizadorMcp`. To deploy by hand:
+   ```bash
+   npx -y aws-cdk@2.1148.0 deploy CotizadorMcp -c alarm_email=<you@example.com>
+   ```
+4. Create a user (Cognito emails a temporary password), then connect Claude Code with
+   the `McpUrl` and `ClaudeCodeClientId` outputs:
+   ```bash
+   aws cognito-idp admin-create-user --user-pool-id <UserPoolId> --username <email> --user-attributes Name=email,Value=<email> Name=email_verified,Value=true
+   ```
 
 ## Design notes
 
-- **Stateless by protocol.** The server targets MCP revision 2026-07-28, which removed
-  sessions. Every request carries its own protocol version and client capabilities,
-  so any Lambda instance can answer any request. A `tools/call` works cold, with no
-  handshake first.
-- **Errors the model can act on.** Expected failures, such as a missing weight or
-  an unknown zone, raise the SDK's `ToolError`, and the model sees the reason.
-  Anything unexpected reaches the model only as a generic error, while the details
-  stay in the server logs. Internals don't leak through tool results.
+- **Stateless by protocol.** MCP revision 2026-07-28 removed sessions; every request
+  carries its own protocol version and client capabilities. A `tools/call` works cold.
+- **Errors the model can act on.** Expected failures raise the SDK's `ToolError`, and
+  the model sees the reason and a way forward. Anything unexpected reaches the model
+  only as a generic error.
 - **Parity with the original.** `tests/fixtures/parity.json` holds outputs produced by
-  *running* the TypeScript engine at a pinned commit. The Python port must match every
-  one, including JavaScript's rounding of halves (`Math.round`), which differs from
-  Python's `round`.
-- **No real configuration.** Margins, tariffs, tax, rate buffer, commission and category
-  weights are the app's public reference values. The business's real settings are not
-  in this repository.
+  *running* the TypeScript engine at a pinned commit; the Python port matches every
+  one, including JavaScript's rounding of halves.
+- **Same code locally and in AWS.** The Lambda runs the same Starlette app under
+  uvicorn; only the stores change (memory locally, DynamoDB in AWS).
+- **No real configuration.** The business's real settings are not in this repository.
 
 Every decision, with its reasons and the gotchas found along the way, is in
 [`docs/decisions.md`](docs/decisions.md).
 
-## Architecture
+## Open items
 
-*Planned (M6).* MCP client → API Gateway HTTP API (JWT authorizer) → Lambda running
-the server in stateless HTTP mode → DynamoDB (`quotes`, `audit`) and Bedrock.
-A diagram will go here.
-
-## Auth flow
-
-*Planned (M7).* Cognito is the authorization server and the MCP server is the
-resource server. The server will validate the JWT, publish Protected Resource
-Metadata (RFC 9728), and map scopes to tools: `quotes:read` for the read tools,
-`quotes:write` for `save_quote`. Cognito does not support Dynamic Client
-Registration, so clients are pre-registered. Decision R1 explains why.
-
-## Audit trail
-
-*Planned (M8).* One record per tool call: request id, caller, scopes, tool, a hash
-of the arguments (never raw images), status, latency, and model tokens. A query
-answering "every `save_quote` call by client X today" will go here.
-
-## Threat model
-
-*Planned.* Covers token theft and replay, scope escalation, prompt injection
-through tool results and screenshots, SSRF if image URLs are accepted, and cost abuse.
-
-## Cost
-
-*Planned.* The target is cents per month at demo volume. An account-level budget of
-USD 5 with an alert at USD 1 is already in place (decision R7).
+- **Claude Code sign-in, end to end.** Every piece is tested separately, and Cognito
+  accepts the exact authorize request; the full browser flow has not been run yet.
+- **`extract_product` live.** The request reaches Bedrock correctly signed; the new
+  AWS account is still blocked from calling Claude models (a support case is open).
+- **First deploy.** API Gateway's 401 cannot carry the `resource_metadata` challenge,
+  so clients must find the metadata at its well-known URLs (public routes here). To
+  be checked against the deployed URL (decision R8).
 
 ## License
 
