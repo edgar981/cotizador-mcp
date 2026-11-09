@@ -54,8 +54,20 @@ What changed from the revision most tutorials and blog posts still describe:
   second half of why R1 lands on pre-registered clients: the mechanism Cognito
   lacks is also the one the spec now prefers.
 
+- **Every request carries its own envelope.** With no `initialize`, the protocol
+  version and the client's capabilities travel in each request's
+  `params._meta` (`io.modelcontextprotocol/protocolVersion`,
+  `io.modelcontextprotocol/clientCapabilities`). The headers alone are not
+  enough: a request without the envelope is a `-32602`. Found by sending raw
+  requests in the week-1 spike, not from the summary above.
+
 **Consequence for the build:** stateless Streamable HTTP is the only transport
 worth targeting for the remote deployment. The brief assumed otherwise in places.
+
+**Verified locally (week 1):** a cold `tools/call` with no prior request
+succeeds; `server/discover` advertises only `2026-07-28`; no response carries
+`Mcp-Session-Id`; the SDK client forced to `mode="2026-07-28"` completes a
+list-and-call in two requests.
 
 ---
 
@@ -68,6 +80,13 @@ The brief specifies "official MCP Python SDK (`mcp`, FastMCP API)". In `mcp`
 decorator style is the same, and `token_verifier` is a constructor argument,
 so M7's auth approach survives unchanged — but any code written from memory of
 FastMCP will not import.
+
+The same SDK draws a line that matters for governance: a tool that raises
+`ToolError` has its message relayed to the model (so the agent can fix its
+call), while **any other exception is treated as a crash and its text never
+leaves the server** — the client sees only `Error executing tool <name>`. Tools
+here raise `ToolError` for anticipated refusals and nothing else, so internal
+error text cannot leak through a tool result by accident.
 
 ---
 
@@ -120,6 +139,24 @@ here means an explicit list, not a single resource. Verify against the actual
 profile before writing the policy.
 
 The region is a single constant in the CDK app, so this is cheap to revisit.
+
+---
+
+## R6 — Local AWS credentials
+
+**Status:** decided, 2026-11-08.
+
+**`aws login` as an IAM user, never root, and no access keys.** The CLI gets
+short-lived credentials from a browser sign-in (they refresh every ~15 min, up
+to a 12-hour session) through the `SignInLocalDevelopmentAccess` managed policy.
+Nothing long-lived sits in `~/.aws`.
+
+With GitHub Actions deploying through an OIDC role (M9), the project has **no
+long-lived AWS credentials anywhere** — not on the developer machine, not in CI.
+
+Gotcha worth writing down: if the browser already holds a root console session,
+`aws login` silently authorises *that* session and the CLI profile ends up
+pointing at `:root`. Sign out of the console first, then choose "IAM user".
 
 ---
 
