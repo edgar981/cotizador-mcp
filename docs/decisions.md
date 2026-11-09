@@ -160,6 +160,28 @@ pointing at `:root`. Sign out of the console first, then choose "IAM user".
 
 ---
 
+## R7 — The budget lives outside the stack
+
+**Status:** done, 2026-11-08. Departs from the brief (M6).
+
+M6 lists the USD 5 budget alarm as part of the CDK stack. It is not, on purpose:
+it was created by hand at the account level (`account-monthly-5-usd`) before
+anything was deployed.
+
+A budget's job is to watch **everything in the account**, including whatever
+the stack forgets to tag and whatever survives a failed `cdk destroy`. A budget
+owned by the stack is deleted together with it, and it does not exist yet during
+the first `cdk deploy` — the riskiest moment. So the guard rail sits under the
+stack, not inside it.
+
+Four email alerts: actual spend over 20 %, 85 % and 100 %, and forecast over
+100 %. The 20 % alert (USD 1) is not in AWS's template. This project should cost
+cents a month, and the account has no free credits — the 85 % alert would only
+fire at USD 4.25, long after something started going wrong. USD 1 is the alert
+that means "look now".
+
+---
+
 ## Not used: Agent Toolkit for AWS
 
 **Status:** considered and declined, 2026-11-08.
