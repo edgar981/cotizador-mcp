@@ -92,7 +92,7 @@ error text cannot leak through a tool result by accident.
 
 ## R3 — Bedrock model access
 
-**Status:** action with Edgar, 2026-11-08.
+**Status:** form submitted; quota case open with AWS Support, 2026-11-08.
 
 Bedrock now enables serverless foundation models automatically on first invoke,
 **but Anthropic models still require the first-time-use form.** Without it, calls
@@ -106,6 +106,26 @@ is granted immediately on successful submission; propagation can take ~15 min.
 Bedrock **API keys**, offered prominently on the console Quickstart page, are
 not used here. AWS documents them as being for exploration and development. The
 Lambda authenticates to Bedrock with its execution role.
+
+**Three gates, not one.** On a new account, access to Claude has three separate
+gates, and each one shows a different error:
+
+1. The use-case form (above): `ResourceNotFoundException` / `ValidationException`.
+2. Account verification: `AccessDeniedException`, "Your account is currently
+   being verified". Clears on its own, normally within 2 hours.
+3. **Quotas.** The account's applied Claude quotas are **0** (tokens and
+   requests per minute, for every Claude model checked: Sonnet 4.6, Haiku 4.5),
+   while the AWS default is 6,000,000 tokens/min. The error is
+   `ThrottlingException`, "Too many tokens per day", which reads like a usage
+   limit even though no call has ever succeeded.
+
+The third gate is not lifted the obvious way. Service Quotas rejects any request
+below the default ("You must provide a quota value greater than the default
+quota value"), so a modest increase cannot be requested there. The Support API
+needs a paid support plan. What remains is a console support case, which the
+Basic plan allows. Check the quota before debugging IAM:
+`aws service-quotas list-service-quotas --service-code bedrock` and look at the
+model's cross-region tokens-per-minute value.
 
 ---
 
