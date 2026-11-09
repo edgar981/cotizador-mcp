@@ -29,6 +29,15 @@ dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.4",
 ]
+infra = [
+    "aws-cdk-lib>=2.275,<3",
+    "constructs>=10.8,<11",
+]
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+# The repo root (for infra/) and tests/ (for the shared helpers in tests/support.py).
+pythonpath = [".", "tests"]
+testpaths = ["tests"]

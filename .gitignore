@@ -10,3 +10,7 @@ dist/
 # Local environment (account-specific ids)
 .env*
 !.env.example
+
+# CDK
+cdk.out/
+cdk.context.json
