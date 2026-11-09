@@ -11,7 +11,7 @@ AWS serverless, deployed with CDK.
 
 > **Status: built and tested; not yet deployed.** All four tools run locally over stdio
 > and stateless HTTP, and Claude Code signs in to the HTTP server through Cognito. The
-> AWS stack synthesizes, and CI is written.
+> AWS stack synthesizes, and CI runs on every push and pull request.
 > Two things wait on the AWS account: Bedrock access for `extract_product`, and the
 > first deploy. [Open items](#open-items) lists what is still unproven.
 
@@ -27,7 +27,7 @@ AWS serverless, deployed with CDK.
 | M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | Synthesized, not deployed |
 | M7 | OAuth 2.1 with Cognito; scope per tool | **Done**; Claude Code signs in end to end (local) |
 | M8 | Audit trail: one DynamoDB record per tool call | **Done** |
-| M9 | CI/CD with GitHub Actions and OIDC deploy roles | Written; runs once the repo is on GitHub |
+| M9 | CI/CD with GitHub Actions and OIDC deploy roles | CI green; the deploy job waits on the first deploy |
 | M10 | This README | **Done** |
 
 ## Architecture
