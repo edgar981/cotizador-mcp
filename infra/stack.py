@@ -23,7 +23,6 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
-from aws_cdk import aws_sns_subscriptions as subscriptions
 from constructs import Construct
 
 from infra.bundling import ROOT, UvBundling
@@ -297,7 +296,15 @@ class CotizadorMcpStack(Stack):
         topic = sns.Topic(self, "Alarms")
         alarm.add_alarm_action(cw_actions.SnsAction(topic))
         if alarm_email:
-            topic.add_subscription(subscriptions.EmailSubscription(alarm_email))
+            # A fixed construct id: EmailSubscription names the construct after the
+            # address, which then shows in `cdk diff` output, and CI logs are public.
+            sns.Subscription(
+                self,
+                "AlarmEmail",
+                topic=topic,
+                protocol=sns.SubscriptionProtocol.EMAIL,
+                endpoint=alarm_email,
+            )
 
         CfnOutput(self, "McpUrl", value=resource_url)
         CfnOutput(self, "ClaudeCodeClientId", value=claude_code.user_pool_client_id)

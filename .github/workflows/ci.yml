@@ -59,4 +59,8 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DIFF_ROLE_ARN }}
           aws-region: us-east-2
           mask-aws-account-id: true # the logs of a public repository are public
-      - run: npx -y "aws-cdk@${CDK_VERSION}" diff CotizadorMcp
+      # The real alarm email, so the diff shows no change to the subscription; a secret,
+      # so it is masked if it ever prints.
+      - env:
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+        run: npx -y "aws-cdk@${CDK_VERSION}" diff CotizadorMcp --context "alarm_email=$ALARM_EMAIL"

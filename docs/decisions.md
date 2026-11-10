@@ -323,6 +323,13 @@ CI and wait for his approval.
 - **Nothing personal in public logs.** Role ARNs (which carry the account id) and the
   alarm email are GitHub secrets, which Actions masks; the AWS action also masks the
   account id in everything printed after it.
+- **Masking hides the exact secret, not what is derived from it.** `EmailSubscription`
+  names its construct after the address, so the logical id carried a mangled copy of the
+  alarm email, and the first pull request's `cdk diff` printed it in a public log. The
+  log was deleted; the subscription now has a fixed id (`AlarmEmail`), a test keeps the
+  address out of every logical id, and the diff job gets the email as a secret so it
+  reports no change. The old logical id was replaced from a local deploy, so no public
+  log ever shows it.
 
 ---
 

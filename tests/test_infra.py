@@ -117,6 +117,13 @@ def test_one_error_alarm_wired_to_email(template: Template) -> None:
     )
 
 
+def test_alarm_email_is_in_no_logical_id(template: Template) -> None:
+    # Logical ids print in `cdk diff` and deploy output, and CI logs are public. Secret
+    # masking hides only the exact address, not a mangled form of it.
+    ids = " ".join(template.to_json()["Resources"]).lower()
+    assert "ops" not in ids and "example" not in ids
+
+
 def test_lambda_runs_behind_the_web_adapter_with_auth_configured(template: Template) -> None:
     (fn,) = resources(template, "AWS::Lambda::Function").values()
     props = fn["Properties"]

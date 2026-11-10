@@ -273,8 +273,9 @@ Deploying creates billable resources; at demo volume they cost cents a month.
    ```
    Then, in GitHub, create the `production` environment (deployment branch `main`,
    required reviewer: you) and set, from the stack's outputs:
-   - environment secrets `AWS_DEPLOY_ROLE_ARN` and `ALARM_EMAIL`;
-   - repository secret `AWS_DIFF_ROLE_ARN`;
+   - environment secret `AWS_DEPLOY_ROLE_ARN`;
+   - repository secrets `AWS_DIFF_ROLE_ARN` and `ALARM_EMAIL` (the pull-request diff
+     needs the email too, or it reports the subscription as removed);
    - repository variables `AWS_DEPLOY_ENABLED=true` and `AWS_DIFF_ENABLED=true`.
 
    They are secrets, not variables, because the logs of a public repository are public
