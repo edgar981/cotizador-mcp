@@ -2,8 +2,17 @@
 
 * ``cotizador-mcp-ci-diff``: assumable from pull requests; may only assume the CDK
   bootstrap *lookup* role (read-only), which is what ``cdk diff`` needs.
-* ``cotizador-mcp-ci-deploy``: assumable only from ``main``; may assume the CDK
-  bootstrap deploy and asset-publishing roles, which carry the actual permissions.
+* ``cotizador-mcp-ci-deploy``: assumable only by a job in the GitHub ``production``
+  environment; may assume the CDK bootstrap deploy and asset-publishing roles, which
+  carry the actual permissions. A job that names an environment gets an OIDC subject
+  ending in ``:environment:<name>`` (not the branch), so this is the subject to
+  trust; the environment itself admits only ``main`` and waits for the owner's approval.
+
+Both trust the repository's OIDC subject prefix exactly as GitHub issues it. With
+immutable subject claims (the default for new repositories) the prefix carries the owner
+and repository ids, ``repo:owner@123/name@456``, so a renamed repository, or a new one
+under a reused name, cannot assume the roles. Read it with
+``gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix``.
 
 Deployed once by hand (it is what lets CI deploy everything else).
 """
@@ -17,10 +26,14 @@ from constructs import Construct
 GITHUB_OIDC = "token.actions.githubusercontent.com"
 #: The default CDK bootstrap qualifier.
 QUALIFIER = "hnb659fds"
+#: The GitHub environment deploy.yml runs in (approval required, main only).
+DEPLOY_ENVIRONMENT = "production"
 
 
 class CotizadorMcpCiStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, *, repo: str, **kwargs: object) -> None:
+    def __init__(
+        self, scope: Construct, construct_id: str, *, subject_prefix: str, **kwargs: object
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         provider = iam.OidcProviderNative(
@@ -39,8 +52,10 @@ class CotizadorMcpCiStack(Stack):
                 assumed_by=iam.WebIdentityPrincipal(
                     provider.oidc_provider_arn,
                     conditions={
-                        "StringEquals": {f"{GITHUB_OIDC}:aud": "sts.amazonaws.com"},
-                        "StringLike": {f"{GITHUB_OIDC}:sub": subject},
+                        "StringEquals": {
+                            f"{GITHUB_OIDC}:aud": "sts.amazonaws.com",
+                            f"{GITHUB_OIDC}:sub": subject,
+                        },
                     },
                 ),
             )
@@ -55,9 +70,11 @@ class CotizadorMcpCiStack(Stack):
             )
             return role
 
-        diff = github_role("Diff", f"repo:{repo}:pull_request", ["lookup"])
+        diff = github_role("Diff", f"{subject_prefix}:pull_request", ["lookup"])
         deploy = github_role(
-            "Deploy", f"repo:{repo}:ref:refs/heads/main", ["deploy", "file-publishing", "lookup"]
+            "Deploy",
+            f"{subject_prefix}:environment:{DEPLOY_ENVIRONMENT}",
+            ["deploy", "file-publishing", "lookup"],
         )
 
         CfnOutput(self, "DiffRoleArn", value=diff.role_arn)

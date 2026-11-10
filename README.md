@@ -9,11 +9,11 @@ the tools: typed schemas, read-only annotations, errors the model can act on,
 scoped OAuth, an audit record per call, and idempotent writes. All of it runs on
 AWS serverless, deployed with CDK.
 
-> **Status: built and tested; not yet deployed.** All four tools run locally over stdio
-> and stateless HTTP, and Claude Code signs in to the HTTP server through Cognito. The
-> AWS stack synthesizes, and CI runs on every push and pull request.
-> Two things wait on the AWS account: Bedrock access for `extract_product`, and the
-> first deploy. [Open items](#open-items) lists what is still unproven.
+> **Status: deployed on AWS (us-east-2).** All four tools run over stdio and stateless
+> HTTP, locally and on Lambda behind API Gateway, and Claude Code signs in through
+> Cognito. CI runs on every push and pull request; a merge to `main` deploys after the
+> owner approves it. `extract_product` waits on Bedrock access for the AWS account.
+> [Open items](#open-items) lists what is still unproven.
 
 ## Status
 
@@ -24,7 +24,7 @@ AWS serverless, deployed with CDK.
 | M3 | Official COP/USD rate (TRM), cached daily, last-known fallback | **Done** |
 | M4 | Tools: `quote_product` · `get_exchange_rate` · `extract_product` · `save_quote` | **Done** (`extract_product` not yet run live) |
 | M5 | Local run over stdio and stateless Streamable HTTP | **Done** (screenshot to quote waits on `extract_product`) |
-| M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | Synthesized, not deployed |
+| M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | **Deployed** (us-east-2) |
 | M7 | OAuth 2.1 with Cognito; scope per tool | **Done**; Claude Code signs in end to end (local) |
 | M8 | Audit trail: one DynamoDB record per tool call | **Done** |
 | M9 | CI/CD with GitHub Actions and OIDC deploy roles | CI green; the deploy job waits on the first deploy |
@@ -178,6 +178,7 @@ Every call of one tool across clients uses the `by_tool` index instead.
 | SSRF through image URLs | URLs are not accepted; images are base64, at most 5 MB, and must match their declared type's magic bytes |
 | Leaking internals in errors | Unexpected exceptions reach the model as a generic error; details stay in the logs |
 | Cost abuse | Stage throttling (5 rps, burst 10); USD 5 budget with alerts from USD 1 |
+| Unreviewed code deployed from CI | The deploy role trusts only GitHub's `production` environment, which admits only `main` and waits for the owner's approval; no AWS keys are stored in GitHub |
 | DNS rebinding against a local server | Host header checked: loopback only locally, the public host only in AWS |
 
 ## Cost
@@ -264,12 +265,23 @@ Deploying creates billable resources; at demo volume they cost cents a month.
    ```bash
    npx -y aws-cdk@2.1148.0 bootstrap aws://<account>/us-east-2
    ```
-2. Deploy the CI roles (once), then set the repository variables `AWS_DIFF_ROLE_ARN`,
-   `AWS_DEPLOY_ROLE_ARN` and `ALARM_EMAIL` from its outputs:
+2. Deploy the CI roles (once). They trust this repository's OIDC subject prefix; a fork
+   passes its own:
    ```bash
-   npx -y aws-cdk@2.1148.0 deploy CotizadorMcpCi
+   gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
+   npx -y aws-cdk@2.1148.0 deploy CotizadorMcpCi -c github_oidc_subject_prefix=<that value>
    ```
-3. From then on, a merge to `main` deploys `CotizadorMcp`. To deploy by hand:
+   Then, in GitHub, create the `production` environment (deployment branch `main`,
+   required reviewer: you) and set, from the stack's outputs:
+   - environment secret `AWS_DEPLOY_ROLE_ARN`;
+   - repository secrets `AWS_DIFF_ROLE_ARN` and `ALARM_EMAIL` (the pull-request diff
+     needs the email too, or it reports the subscription as removed);
+   - repository variables `AWS_DEPLOY_ENABLED=true` and `AWS_DIFF_ENABLED=true`.
+
+   They are secrets, not variables, because the logs of a public repository are public
+   and GitHub masks secrets in them.
+3. From then on, a merge to `main` deploys `CotizadorMcp` once you approve it. To deploy
+   by hand:
    ```bash
    npx -y aws-cdk@2.1148.0 deploy CotizadorMcp -c alarm_email=<you@example.com>
    ```
@@ -300,9 +312,10 @@ Every decision, with its reasons and the gotchas found along the way, is in
 
 - **`extract_product` live.** The request reaches Bedrock correctly signed; the new
   AWS account is still blocked from calling Claude models (a support case is open).
-- **First deploy.** API Gateway's 401 cannot carry the `resource_metadata` challenge,
-  so clients must find the metadata at its well-known URLs (public routes here). To
-  be checked against the deployed URL (decision R8).
+- **Sign-in against the deployed URL.** API Gateway's 401 is a bare `WWW-Authenticate:
+  Bearer`, without the `resource_metadata` pointer, so clients must find the metadata
+  at its well-known URLs (public routes here, verified). Claude Code against the
+  deployed URL is still to be run (decision R8).
 
 ## License
 

@@ -28,7 +28,10 @@ CotizadorMcpCiStack(
     app,
     "CotizadorMcpCi",
     env=env,
-    repo=app.node.try_get_context("github_repo") or "edgar981/cotizador-mcp",
+    # The repository's OIDC subject prefix, immutable form (see ci_stack.py); a fork
+    # passes its own with --context github_oidc_subject_prefix=...
+    subject_prefix=app.node.try_get_context("github_oidc_subject_prefix")
+    or "repo:edgar981@77586877/cotizador-mcp@1451981537",
     description="cotizador-mcp: GitHub Actions OIDC roles for CI.",
 )
 cdk.Tags.of(app).add("project", "cotizador-mcp")

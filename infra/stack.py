@@ -23,7 +23,6 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
-from aws_cdk import aws_sns_subscriptions as subscriptions
 from constructs import Construct
 
 from infra.bundling import ROOT, UvBundling
@@ -32,6 +31,12 @@ from infra.bundling import ROOT, UvBundling
 LWA_LAYER = "arn:aws:lambda:{region}:753240598075:layer:LambdaAdapterLayerArm64:30"
 #: Where Claude Code listens for the OAuth redirect (claude mcp add --callback-port 8765).
 CLAUDE_CODE_CALLBACK = "http://localhost:8765/callback"
+
+
+def _stack_suffix(stack: Stack) -> str:
+    """First block of the stack id's UUID, e.g. ``e34fec60``: stable, unique, anonymous."""
+    uuid = Fn.select(2, Fn.split("/", stack.stack_id))
+    return Fn.select(0, Fn.split("-", uuid))
 
 
 class CotizadorMcpStack(Stack):
@@ -69,7 +74,9 @@ class CotizadorMcpStack(Stack):
         domain = pool.add_domain(
             "Login",
             cognito_domain=cognito.CognitoDomainOptions(
-                domain_prefix=Fn.join("-", ["cotizador-mcp", self.account])
+                # Unique per stack without publishing the account id: the domain shows
+                # up in the public authorization-server metadata.
+                domain_prefix=Fn.join("-", ["cotizador-mcp", _stack_suffix(self)])
             ),
             # Resource binding (the RFC 8707 `resource` parameter) needs managed login.
             managed_login_version=cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
@@ -289,7 +296,15 @@ class CotizadorMcpStack(Stack):
         topic = sns.Topic(self, "Alarms")
         alarm.add_alarm_action(cw_actions.SnsAction(topic))
         if alarm_email:
-            topic.add_subscription(subscriptions.EmailSubscription(alarm_email))
+            # A fixed construct id: EmailSubscription names the construct after the
+            # address, which then shows in `cdk diff` output, and CI logs are public.
+            sns.Subscription(
+                self,
+                "AlarmEmail",
+                topic=topic,
+                protocol=sns.SubscriptionProtocol.EMAIL,
+                endpoint=alarm_email,
+            )
 
         CfnOutput(self, "McpUrl", value=resource_url)
         CfnOutput(self, "ClaudeCodeClientId", value=claude_code.user_pool_client_id)

@@ -267,7 +267,22 @@ that means "look now".
 
 ## R8 — How it runs on AWS
 
-**Status:** decided and synthesized (`cdk synth`); not deployed. Deploying is Edgar's call.
+**Status:** deployed 2026-11-09 (us-east-2), with Edgar's OK. Later deploys go through
+CI and wait for his approval.
+
+**First-deploy findings.**
+
+- API Gateway's JWT authorizer answers 401 with a bare `WWW-Authenticate: Bearer`, as
+  expected, so discovery relies on the public well-known routes. They answer from the
+  Lambda: 3.2 s cold (2.5 s of it init), 0.4 s warm; 145 MB of 1024 MB used.
+- **The Cognito domain is public, so it must not carry the account id.** The prefix
+  first used the account id, which then appeared in the authorization-server
+  metadata. It now uses the first block of the stack id's UUID. Changing it once
+  deployed takes two steps: a user pool holds one prefix domain at a time, and
+  CloudFormation creates a replacement before deleting the original, so the update
+  fails (and rolls back) until the old domain is removed by hand. Cheap only before
+  anyone signs in.
+
 
 - **Lambda Web Adapter, not a Lambda-specific handler.** uvicorn serves the same
   Starlette app as `--transport http`; the adapter turns API Gateway events into HTTP.
@@ -291,8 +306,30 @@ that means "look now".
 - **Cost caps:** stage throttling (5 rps, burst 10). The account's Lambda concurrency
   limit is 10, so reserved concurrency cannot be used (it must leave 10 unreserved).
 - **CI/CD without keys.** GitHub's OIDC provider; a *diff* role trusted from pull
-  requests and a *deploy* role trusted only from `main`, each limited to assuming the
-  CDK bootstrap roles. Actions are pinned to commit SHAs.
+  requests and a *deploy* role, each limited to assuming the CDK bootstrap roles.
+  Actions are pinned to commit SHAs.
+- **The deploy role trusts an environment, not a branch.** A job that names a GitHub
+  environment presents the OIDC subject `repo:<repo>:environment:<name>`, never
+  `ref:refs/heads/main`; trusting the branch would have refused every approved deploy.
+  So the role trusts `environment:production`, and the environment admits only `main`
+  and waits for the owner's approval (brief rule 4: every deploy is Edgar's call).
+- **The roles trust the immutable subject, not the repository name.** This repository
+  has GitHub's immutable subject claims, so its tokens say
+  `repo:edgar981@77586877/cotizador-mcp@1451981537:…` (owner and repository ids), not
+  `repo:edgar981/cotizador-mcp:…`. The first pull request's `cdk diff` was refused on
+  exactly that. Trusting the ids is also the safer form: a renamed repository, or a new
+  one under a reused name, presents different ids and cannot assume the roles. The
+  subjects are matched with `StringEquals`, no wildcards.
+- **Nothing personal in public logs.** Role ARNs (which carry the account id) and the
+  alarm email are GitHub secrets, which Actions masks; the AWS action also masks the
+  account id in everything printed after it.
+- **Masking hides the exact secret, not what is derived from it.** `EmailSubscription`
+  names its construct after the address, so the logical id carried a mangled copy of the
+  alarm email, and the first pull request's `cdk diff` printed it in a public log. The
+  log was deleted; the subscription now has a fixed id (`AlarmEmail`), a test keeps the
+  address out of every logical id, and the diff job gets the email as a secret so it
+  reports no change. The old logical id was replaced from a local deploy, so no public
+  log ever shows it.
 
 ---
 

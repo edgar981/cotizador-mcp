@@ -86,6 +86,9 @@ def test_cognito_has_no_self_sign_up_and_a_public_pkce_client(template: Template
         },
     )
     template.has_resource_properties("AWS::Cognito::UserPoolDomain", {"ManagedLoginVersion": 2})
+    # The domain is public (authorization-server metadata), so it must not carry the account.
+    (domain,) = template.find_resources("AWS::Cognito::UserPoolDomain").values()
+    assert "AWS::AccountId" not in json.dumps(domain["Properties"]["Domain"])
 
 
 def test_stage_is_throttled_and_access_logged(template: Template) -> None:
@@ -114,6 +117,13 @@ def test_one_error_alarm_wired_to_email(template: Template) -> None:
     )
 
 
+def test_alarm_email_is_in_no_logical_id(template: Template) -> None:
+    # Logical ids print in `cdk diff` and deploy output, and CI logs are public. Secret
+    # masking hides only the exact address, not a mangled form of it.
+    ids = " ".join(template.to_json()["Resources"]).lower()
+    assert "ops" not in ids and "example" not in ids
+
+
 def test_lambda_runs_behind_the_web_adapter_with_auth_configured(template: Template) -> None:
     (fn,) = resources(template, "AWS::Lambda::Function").values()
     props = fn["Properties"]
@@ -129,15 +139,18 @@ def test_lambda_runs_behind_the_web_adapter_with_auth_configured(template: Templ
     assert props["Timeout"] < 30  # under API Gateway's limit
 
 
-def test_ci_roles_trust_only_this_repo_and_main_for_deploy() -> None:
+def test_ci_roles_trust_only_this_repo_and_the_approved_environment_for_deploy() -> None:
     app = cdk.App()
-    template = Template.from_stack(CotizadorMcpCiStack(app, "Ci", env=ENV, repo="owner/repo"))
+    prefix = "repo:owner@1/repo@2"  # GitHub's immutable form: owner and repository ids
+    template = Template.from_stack(CotizadorMcpCiStack(app, "Ci", env=ENV, subject_prefix=prefix))
     roles = {
         r["Properties"]["RoleName"]: r["Properties"]
         for r in template.find_resources("AWS::IAM::Role").values()
     }
     deploy = json.dumps(roles["cotizador-mcp-ci-deploy"]["AssumeRolePolicyDocument"])
     diff = json.dumps(roles["cotizador-mcp-ci-diff"]["AssumeRolePolicyDocument"])
-    assert "repo:owner/repo:ref:refs/heads/main" in deploy
-    assert "repo:owner/repo:pull_request" in diff
+    assert f'"token.actions.githubusercontent.com:sub": "{prefix}:environment:production"' in deploy
+    assert "refs/heads" not in deploy  # a job in an environment never presents a branch
+    assert f'"token.actions.githubusercontent.com:sub": "{prefix}:pull_request"' in diff
+    assert "StringLike" not in deploy + diff  # exact subjects, no wildcards
     assert '"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"' in deploy
