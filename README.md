@@ -9,11 +9,11 @@ the tools: typed schemas, read-only annotations, errors the model can act on,
 scoped OAuth, an audit record per call, and idempotent writes. All of it runs on
 AWS serverless, deployed with CDK.
 
-> **Status: built and tested; not yet deployed.** All four tools run locally over stdio
-> and stateless HTTP, and Claude Code signs in to the HTTP server through Cognito. The
-> AWS stack synthesizes, and CI runs on every push and pull request.
-> Two things wait on the AWS account: Bedrock access for `extract_product`, and the
-> first deploy. [Open items](#open-items) lists what is still unproven.
+> **Status: deployed on AWS (us-east-2).** All four tools run over stdio and stateless
+> HTTP, locally and on Lambda behind API Gateway, and Claude Code signs in through
+> Cognito. CI runs on every push and pull request; a merge to `main` deploys after the
+> owner approves it. `extract_product` waits on Bedrock access for the AWS account.
+> [Open items](#open-items) lists what is still unproven.
 
 ## Status
 
@@ -24,7 +24,7 @@ AWS serverless, deployed with CDK.
 | M3 | Official COP/USD rate (TRM), cached daily, last-known fallback | **Done** |
 | M4 | Tools: `quote_product` · `get_exchange_rate` · `extract_product` · `save_quote` | **Done** (`extract_product` not yet run live) |
 | M5 | Local run over stdio and stateless Streamable HTTP | **Done** (screenshot to quote waits on `extract_product`) |
-| M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | Synthesized, not deployed |
+| M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | **Deployed** (us-east-2) |
 | M7 | OAuth 2.1 with Cognito; scope per tool | **Done**; Claude Code signs in end to end (local) |
 | M8 | Audit trail: one DynamoDB record per tool call | **Done** |
 | M9 | CI/CD with GitHub Actions and OIDC deploy roles | CI green; the deploy job waits on the first deploy |
@@ -309,9 +309,10 @@ Every decision, with its reasons and the gotchas found along the way, is in
 
 - **`extract_product` live.** The request reaches Bedrock correctly signed; the new
   AWS account is still blocked from calling Claude models (a support case is open).
-- **First deploy.** API Gateway's 401 cannot carry the `resource_metadata` challenge,
-  so clients must find the metadata at its well-known URLs (public routes here). To
-  be checked against the deployed URL (decision R8).
+- **Sign-in against the deployed URL.** API Gateway's 401 is a bare `WWW-Authenticate:
+  Bearer`, without the `resource_metadata` pointer, so clients must find the metadata
+  at its well-known URLs (public routes here, verified). Claude Code against the
+  deployed URL is still to be run (decision R8).
 
 ## License
 

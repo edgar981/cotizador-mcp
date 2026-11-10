@@ -34,6 +34,12 @@ LWA_LAYER = "arn:aws:lambda:{region}:753240598075:layer:LambdaAdapterLayerArm64:
 CLAUDE_CODE_CALLBACK = "http://localhost:8765/callback"
 
 
+def _stack_suffix(stack: Stack) -> str:
+    """First block of the stack id's UUID, e.g. ``e34fec60``: stable, unique, anonymous."""
+    uuid = Fn.select(2, Fn.split("/", stack.stack_id))
+    return Fn.select(0, Fn.split("-", uuid))
+
+
 class CotizadorMcpStack(Stack):
     def __init__(
         self,
@@ -69,7 +75,9 @@ class CotizadorMcpStack(Stack):
         domain = pool.add_domain(
             "Login",
             cognito_domain=cognito.CognitoDomainOptions(
-                domain_prefix=Fn.join("-", ["cotizador-mcp", self.account])
+                # Unique per stack without publishing the account id: the domain shows
+                # up in the public authorization-server metadata.
+                domain_prefix=Fn.join("-", ["cotizador-mcp", _stack_suffix(self)])
             ),
             # Resource binding (the RFC 8707 `resource` parameter) needs managed login.
             managed_login_version=cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,

@@ -86,6 +86,9 @@ def test_cognito_has_no_self_sign_up_and_a_public_pkce_client(template: Template
         },
     )
     template.has_resource_properties("AWS::Cognito::UserPoolDomain", {"ManagedLoginVersion": 2})
+    # The domain is public (authorization-server metadata), so it must not carry the account.
+    (domain,) = template.find_resources("AWS::Cognito::UserPoolDomain").values()
+    assert "AWS::AccountId" not in json.dumps(domain["Properties"]["Domain"])
 
 
 def test_stage_is_throttled_and_access_logged(template: Template) -> None:

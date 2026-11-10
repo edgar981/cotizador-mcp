@@ -267,7 +267,22 @@ that means "look now".
 
 ## R8 — How it runs on AWS
 
-**Status:** decided and synthesized (`cdk synth`); not deployed. Deploying is Edgar's call.
+**Status:** deployed 2026-11-09 (us-east-2), with Edgar's OK. Later deploys go through
+CI and wait for his approval.
+
+**First-deploy findings.**
+
+- API Gateway's JWT authorizer answers 401 with a bare `WWW-Authenticate: Bearer`, as
+  expected, so discovery relies on the public well-known routes. They answer from the
+  Lambda: 3.2 s cold (2.5 s of it init), 0.4 s warm; 145 MB of 1024 MB used.
+- **The Cognito domain is public, so it must not carry the account id.** The prefix
+  first used the account id, which then appeared in the authorization-server
+  metadata. It now uses the first block of the stack id's UUID. Changing it once
+  deployed takes two steps: a user pool holds one prefix domain at a time, and
+  CloudFormation creates a replacement before deleting the original, so the update
+  fails (and rolls back) until the old domain is removed by hand. Cheap only before
+  anyone signs in.
+
 
 - **Lambda Web Adapter, not a Lambda-specific handler.** uvicorn serves the same
   Starlette app as `--transport http`; the adapter turns API Gateway events into HTTP.
