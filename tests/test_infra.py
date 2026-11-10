@@ -129,7 +129,7 @@ def test_lambda_runs_behind_the_web_adapter_with_auth_configured(template: Templ
     assert props["Timeout"] < 30  # under API Gateway's limit
 
 
-def test_ci_roles_trust_only_this_repo_and_main_for_deploy() -> None:
+def test_ci_roles_trust_only_this_repo_and_the_approved_environment_for_deploy() -> None:
     app = cdk.App()
     template = Template.from_stack(CotizadorMcpCiStack(app, "Ci", env=ENV, repo="owner/repo"))
     roles = {
@@ -138,6 +138,7 @@ def test_ci_roles_trust_only_this_repo_and_main_for_deploy() -> None:
     }
     deploy = json.dumps(roles["cotizador-mcp-ci-deploy"]["AssumeRolePolicyDocument"])
     diff = json.dumps(roles["cotizador-mcp-ci-diff"]["AssumeRolePolicyDocument"])
-    assert "repo:owner/repo:ref:refs/heads/main" in deploy
+    assert "repo:owner/repo:environment:production" in deploy
+    assert "refs/heads" not in deploy  # a job in an environment never presents a branch
     assert "repo:owner/repo:pull_request" in diff
     assert '"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"' in deploy

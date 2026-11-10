@@ -2,8 +2,11 @@
 
 * ``cotizador-mcp-ci-diff``: assumable from pull requests; may only assume the CDK
   bootstrap *lookup* role (read-only), which is what ``cdk diff`` needs.
-* ``cotizador-mcp-ci-deploy``: assumable only from ``main``; may assume the CDK
-  bootstrap deploy and asset-publishing roles, which carry the actual permissions.
+* ``cotizador-mcp-ci-deploy``: assumable only by a job in the GitHub ``production``
+  environment; may assume the CDK bootstrap deploy and asset-publishing roles, which
+  carry the actual permissions. A job that names an environment gets an OIDC subject
+  of ``repo:<repo>:environment:<name>`` (not the branch), so this is the subject to
+  trust; the environment itself admits only ``main`` and waits for the owner's approval.
 
 Deployed once by hand (it is what lets CI deploy everything else).
 """
@@ -17,6 +20,8 @@ from constructs import Construct
 GITHUB_OIDC = "token.actions.githubusercontent.com"
 #: The default CDK bootstrap qualifier.
 QUALIFIER = "hnb659fds"
+#: The GitHub environment deploy.yml runs in (approval required, main only).
+DEPLOY_ENVIRONMENT = "production"
 
 
 class CotizadorMcpCiStack(Stack):
@@ -57,7 +62,9 @@ class CotizadorMcpCiStack(Stack):
 
         diff = github_role("Diff", f"repo:{repo}:pull_request", ["lookup"])
         deploy = github_role(
-            "Deploy", f"repo:{repo}:ref:refs/heads/main", ["deploy", "file-publishing", "lookup"]
+            "Deploy",
+            f"repo:{repo}:environment:{DEPLOY_ENVIRONMENT}",
+            ["deploy", "file-publishing", "lookup"],
         )
 
         CfnOutput(self, "DiffRoleArn", value=diff.role_arn)

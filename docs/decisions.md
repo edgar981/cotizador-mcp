@@ -291,8 +291,16 @@ that means "look now".
 - **Cost caps:** stage throttling (5 rps, burst 10). The account's Lambda concurrency
   limit is 10, so reserved concurrency cannot be used (it must leave 10 unreserved).
 - **CI/CD without keys.** GitHub's OIDC provider; a *diff* role trusted from pull
-  requests and a *deploy* role trusted only from `main`, each limited to assuming the
-  CDK bootstrap roles. Actions are pinned to commit SHAs.
+  requests and a *deploy* role, each limited to assuming the CDK bootstrap roles.
+  Actions are pinned to commit SHAs.
+- **The deploy role trusts an environment, not a branch.** A job that names a GitHub
+  environment presents the OIDC subject `repo:<repo>:environment:<name>`, never
+  `ref:refs/heads/main`; trusting the branch would have refused every approved deploy.
+  So the role trusts `environment:production`, and the environment admits only `main`
+  and waits for the owner's approval (brief rule 4: every deploy is Edgar's call).
+- **Nothing personal in public logs.** Role ARNs (which carry the account id) and the
+  alarm email are GitHub secrets, which Actions masks; the AWS action also masks the
+  account id in everything printed after it.
 
 ---
 

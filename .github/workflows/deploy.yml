@@ -1,5 +1,7 @@
-# A merge to main deploys, with no stored AWS keys: GitHub's OIDC token is exchanged
-# for a short-lived role session that may only assume the CDK bootstrap roles.
+# A merge to main deploys once the owner approves it, with no stored AWS keys: the job
+# runs in the `production` environment (main only, approval required), and GitHub's
+# OIDC token for that environment is exchanged for a short-lived role session that may
+# only assume the CDK bootstrap roles.
 name: deploy
 
 on:
@@ -24,7 +26,7 @@ jobs:
       id-token: write
 
   deploy:
-    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    if: vars.AWS_DEPLOY_ENABLED == 'true'
     needs: checks
     runs-on: ubuntu-latest
     environment: production
@@ -41,9 +43,12 @@ jobs:
           node-version: "24"
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
-      - run: >
+          mask-aws-account-id: true # the logs of a public repository are public
+      - env:
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+        run: >
           npx -y "aws-cdk@2.1148.0" deploy CotizadorMcp
           --require-approval never
-          --context "alarm_email=${{ vars.ALARM_EMAIL }}"
+          --context "alarm_email=$ALARM_EMAIL"

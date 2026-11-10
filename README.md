@@ -178,6 +178,7 @@ Every call of one tool across clients uses the `by_tool` index instead.
 | SSRF through image URLs | URLs are not accepted; images are base64, at most 5 MB, and must match their declared type's magic bytes |
 | Leaking internals in errors | Unexpected exceptions reach the model as a generic error; details stay in the logs |
 | Cost abuse | Stage throttling (5 rps, burst 10); USD 5 budget with alerts from USD 1 |
+| Unreviewed code deployed from CI | The deploy role trusts only GitHub's `production` environment, which admits only `main` and waits for the owner's approval; no AWS keys are stored in GitHub |
 | DNS rebinding against a local server | Host header checked: loopback only locally, the public host only in AWS |
 
 ## Cost
@@ -264,12 +265,20 @@ Deploying creates billable resources; at demo volume they cost cents a month.
    ```bash
    npx -y aws-cdk@2.1148.0 bootstrap aws://<account>/us-east-2
    ```
-2. Deploy the CI roles (once), then set the repository variables `AWS_DIFF_ROLE_ARN`,
-   `AWS_DEPLOY_ROLE_ARN` and `ALARM_EMAIL` from its outputs:
+2. Deploy the CI roles (once):
    ```bash
    npx -y aws-cdk@2.1148.0 deploy CotizadorMcpCi
    ```
-3. From then on, a merge to `main` deploys `CotizadorMcp`. To deploy by hand:
+   Then, in GitHub, create the `production` environment (deployment branch `main`,
+   required reviewer: you) and set, from the stack's outputs:
+   - environment secrets `AWS_DEPLOY_ROLE_ARN` and `ALARM_EMAIL`;
+   - repository secret `AWS_DIFF_ROLE_ARN`;
+   - repository variables `AWS_DEPLOY_ENABLED=true` and `AWS_DIFF_ENABLED=true`.
+
+   They are secrets, not variables, because the logs of a public repository are public
+   and GitHub masks secrets in them.
+3. From then on, a merge to `main` deploys `CotizadorMcp` once you approve it. To deploy
+   by hand:
    ```bash
    npx -y aws-cdk@2.1148.0 deploy CotizadorMcp -c alarm_email=<you@example.com>
    ```
