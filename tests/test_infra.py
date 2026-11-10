@@ -134,14 +134,16 @@ def test_lambda_runs_behind_the_web_adapter_with_auth_configured(template: Templ
 
 def test_ci_roles_trust_only_this_repo_and_the_approved_environment_for_deploy() -> None:
     app = cdk.App()
-    template = Template.from_stack(CotizadorMcpCiStack(app, "Ci", env=ENV, repo="owner/repo"))
+    prefix = "repo:owner@1/repo@2"  # GitHub's immutable form: owner and repository ids
+    template = Template.from_stack(CotizadorMcpCiStack(app, "Ci", env=ENV, subject_prefix=prefix))
     roles = {
         r["Properties"]["RoleName"]: r["Properties"]
         for r in template.find_resources("AWS::IAM::Role").values()
     }
     deploy = json.dumps(roles["cotizador-mcp-ci-deploy"]["AssumeRolePolicyDocument"])
     diff = json.dumps(roles["cotizador-mcp-ci-diff"]["AssumeRolePolicyDocument"])
-    assert "repo:owner/repo:environment:production" in deploy
+    assert f'"token.actions.githubusercontent.com:sub": "{prefix}:environment:production"' in deploy
     assert "refs/heads" not in deploy  # a job in an environment never presents a branch
-    assert "repo:owner/repo:pull_request" in diff
+    assert f'"token.actions.githubusercontent.com:sub": "{prefix}:pull_request"' in diff
+    assert "StringLike" not in deploy + diff  # exact subjects, no wildcards
     assert '"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"' in deploy

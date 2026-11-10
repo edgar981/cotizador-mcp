@@ -313,6 +313,13 @@ CI and wait for his approval.
   `ref:refs/heads/main`; trusting the branch would have refused every approved deploy.
   So the role trusts `environment:production`, and the environment admits only `main`
   and waits for the owner's approval (brief rule 4: every deploy is Edgar's call).
+- **The roles trust the immutable subject, not the repository name.** This repository
+  has GitHub's immutable subject claims, so its tokens say
+  `repo:edgar981@77586877/cotizador-mcp@1451981537:…` (owner and repository ids), not
+  `repo:edgar981/cotizador-mcp:…`. The first pull request's `cdk diff` was refused on
+  exactly that. Trusting the ids is also the safer form: a renamed repository, or a new
+  one under a reused name, presents different ids and cannot assume the roles. The
+  subjects are matched with `StringEquals`, no wildcards.
 - **Nothing personal in public logs.** Role ARNs (which carry the account id) and the
   alarm email are GitHub secrets, which Actions masks; the AWS action also masks the
   account id in everything printed after it.

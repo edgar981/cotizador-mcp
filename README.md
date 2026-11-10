@@ -265,9 +265,11 @@ Deploying creates billable resources; at demo volume they cost cents a month.
    ```bash
    npx -y aws-cdk@2.1148.0 bootstrap aws://<account>/us-east-2
    ```
-2. Deploy the CI roles (once):
+2. Deploy the CI roles (once). They trust this repository's OIDC subject prefix; a fork
+   passes its own:
    ```bash
-   npx -y aws-cdk@2.1148.0 deploy CotizadorMcpCi
+   gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
+   npx -y aws-cdk@2.1148.0 deploy CotizadorMcpCi -c github_oidc_subject_prefix=<that value>
    ```
    Then, in GitHub, create the `production` environment (deployment branch `main`,
    required reviewer: you) and set, from the stack's outputs:
