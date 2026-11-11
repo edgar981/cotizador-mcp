@@ -25,9 +25,9 @@ AWS serverless, deployed with CDK.
 | M4 | Tools: `quote_product` · `get_exchange_rate` · `extract_product` · `save_quote` | **Done** (`extract_product` not yet run live) |
 | M5 | Local run over stdio and stateless Streamable HTTP | **Done** (screenshot to quote waits on `extract_product`) |
 | M6 | AWS stack in CDK: Lambda, HTTP API, DynamoDB, least-privilege IAM, alarm | **Deployed** (us-east-2) |
-| M7 | OAuth 2.1 with Cognito; scope per tool | **Done**; Claude Code signs in end to end (local) |
+| M7 | OAuth 2.1 with Cognito; scope per tool | **Done**; Claude Code signs in end to end, locally and against the deployed URL |
 | M8 | Audit trail: one DynamoDB record per tool call | **Done** |
-| M9 | CI/CD with GitHub Actions and OIDC deploy roles | CI green; the deploy job waits on the first deploy |
+| M9 | CI/CD with GitHub Actions and OIDC deploy roles | **Done**; the first merge to `main` deployed from CI after the owner's approval (2026-11-10) |
 | M10 | This README | **Done** |
 
 ## Architecture
@@ -312,10 +312,13 @@ Every decision, with its reasons and the gotchas found along the way, is in
 
 - **`extract_product` live.** The request reaches Bedrock correctly signed; the new
   AWS account is still blocked from calling Claude models (a support case is open).
-- **Sign-in against the deployed URL.** API Gateway's 401 is a bare `WWW-Authenticate:
-  Bearer`, without the `resource_metadata` pointer, so clients must find the metadata
-  at its well-known URLs (public routes here, verified). Claude Code against the
-  deployed URL is still to be run (decision R8).
+  Last checked 2026-11-10 with one minimal call: 403 `permission_error`,
+  "anthropic.claude-opus-5-5 is not available for this account" (decision R3).
+
+Closed since the first deploy: Claude Code signs in against the deployed URL and calls
+a tool (2026-11-10). API Gateway's 401 is a bare `WWW-Authenticate: Bearer`, without
+the `resource_metadata` pointer, and the client found the metadata at the public
+well-known URLs all the same (decision R8).
 
 ## License
 

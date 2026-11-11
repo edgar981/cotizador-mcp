@@ -190,6 +190,13 @@ Two things the probe found that the documentation does not say:
   this account", including models documented as open to all Bedrock customers. Same
   new-account gate as the zero quota; the support case covers both.
 
+**Checked again, 2026-11-10 20:22 (UTC-5): still refused.** One call, no retries, the
+smallest that exercises the gate: `AnthropicBedrockMantle` in `us-east-1`,
+`anthropic.claude-opus-5-5`, a one-line text message, `max_tokens=16`. Answer: HTTP 403,
+`permission_error`, "anthropic.claude-opus-5-5 is not available for this account. You
+can explore other available models on Amazon Bedrock. For additional access options,
+contact AWS Sales". The same error as on 2026-11-08; the support case is untouched.
+
 ---
 
 ## R4 — AWS account plan
@@ -268,7 +275,19 @@ that means "look now".
 ## R8 — How it runs on AWS
 
 **Status:** deployed 2026-11-09 (us-east-2), with Edgar's OK. Later deploys go through
-CI and wait for his approval.
+CI and wait for his approval; the first one ran 2026-11-10.
+
+**First deploy from CI, 2026-11-10.** The merge of pull request #1 started the deploy
+workflow (run 42920815435), which waited at the `production` environment until Edgar
+approved it and finished at 18:22 (UTC-5). The stack already matched the code, so only
+`CDKMetadata` changed. Afterwards the URL answers 401 without a token and both
+well-known routes answer 200.
+
+**Sign-in against the deployed URL, 2026-11-10: works.** Claude Code 2.1.322, added
+with the `ClaudeCodeClientId` and `McpUrl` outputs as in the README, opened the browser,
+Edgar signed in through Cognito, and `get_exchange_rate` answered through API Gateway
+and the Lambda. The bare 401 (below) did not get in the way: the client found the
+metadata at the well-known URLs.
 
 **First-deploy findings.**
 
@@ -297,8 +316,8 @@ CI and wait for his approval.
   bad tokens before a Lambda runs; the server checks again, including per-tool
   scopes. **Known cost:** an HTTP API authorizer's 401 cannot carry the
   `resource_metadata` challenge the server sends. MCP clients must then fall back to
-  the well-known metadata URLs, which are public routes here. To verify on the
-  first deploy, with Claude Code against the remote URL.
+  the well-known metadata URLs, which are public routes here. Verified with Claude
+  Code against the deployed URL (above).
 - **Bedrock IAM is scoped to one project in one region, not to one model.** On the
   newer Bedrock surface the authorized resource is the project; restricting to a model
   needs a condition key not yet verified here, and a wrong key would silently deny
